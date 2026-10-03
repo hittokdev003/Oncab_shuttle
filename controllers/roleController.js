@@ -8,6 +8,7 @@ const { logAction } = require('../middleware/auditLog');
 exports.listRoles = async (req, res, next) => {
   try {
     const roles = await Role.findAll({
+      where: { id: { [Op.ne]: 1 } },
       include: [{ model: Permission, as: 'permissions' }],
       order: [['name', 'ASC']],
     });
@@ -44,6 +45,7 @@ exports.updateRole = async (req, res, next) => {
   try {
     const role = await Role.findByPk(req.params.id);
     if (!role) return res.status(404).json({ success: false, message: 'Role not found' });
+    if (Number(role.id) === 1) return res.status(403).json({ success: false, message: 'Admin role cannot be modified' });
 
     const { display_name, description, is_active, permission_ids } = req.body;
     await role.update({ display_name, description, is_active });
@@ -64,6 +66,7 @@ exports.deleteRole = async (req, res, next) => {
   try {
     const role = await Role.findByPk(req.params.id);
     if (!role) return res.status(404).json({ success: false, message: 'Role not found' });
+    if (Number(role.id) === 1) return res.status(403).json({ success: false, message: 'Admin role cannot be deleted' });
 
     const usersCount = await AdminUser.count({ where: { role_id: role.id } });
     if (usersCount > 0) return res.status(409).json({ success: false, message: `Cannot delete role: ${usersCount} users assigned to it` });
@@ -100,6 +103,7 @@ exports.assignPermissions = async (req, res, next) => {
   try {
     const role = await Role.findByPk(req.params.id);
     if (!role) return res.status(404).json({ success: false, message: 'Role not found' });
+    if (Number(role.id) === 1) return res.status(403).json({ success: false, message: 'Admin role permissions cannot be changed' });
 
     const { permission_ids } = req.body;
     const permissions = await Permission.findAll({ where: { id: permission_ids } });

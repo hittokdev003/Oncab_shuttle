@@ -9,6 +9,24 @@ exports.stats = async (req, res, next) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const thisMonth = new Date(); thisMonth.setDate(1);
+    const isOwner = req.user?.role?.name === 'owner';
+    const ownerVehicleWhere = isOwner ? { owner_id: req.user.id } : {};
+    const ownerDriverWhere = isOwner ? { owner_id: req.user.id } : {};
+    const ownedVehicleRows = isOwner ? await Vehicle.findAll({ attributes: ['id'], where: ownerVehicleWhere, raw: true }) : [];
+    const ownedDriverRows = isOwner ? await Driver.findAll({ attributes: ['id'], where: ownerDriverWhere, raw: true }) : [];
+    const ownedVehicleIds = ownedVehicleRows.map((v) => v.id);
+    const ownedDriverIds = ownedDriverRows.map((d) => d.id);
+    const ownerTripWhere = isOwner
+      ? { [Op.or]: [{ vehicle_id: { [Op.in]: ownedVehicleIds } }, { driver_id: { [Op.in]: ownedDriverIds } }] }
+      : {};
+    const ownerTripIds = isOwner
+      ? (await Trip.findAll({ attributes: ['id'], where: ownerTripWhere, raw: true })).map((trip) => trip.id)
+      : [];
+    const ownerBookingWhere = isOwner ? { trip_id: { [Op.in]: ownerTripIds } } : {};
+    const ownerBookingIds = isOwner
+      ? (await Booking.findAll({ attributes: ['id'], where: ownerBookingWhere, raw: true })).map((booking) => booking.id)
+      : [];
+    const ownerPaymentWhere = isOwner ? { booking_id: { [Op.in]: ownerBookingIds } } : {};
 
     const [
       totalTrips, todayTrips, activeTrips,
@@ -19,21 +37,21 @@ exports.stats = async (req, res, next) => {
       totalRevenue, todayRevenue,
       pendingRefunds, cancelledBookings,
     ] = await Promise.all([
-      Trip.count(),
-      Trip.count({ where: { trip_date: today } }),
-      Trip.count({ where: { status: 'Active' } }),
-      Booking.count(),
-      Booking.count({ where: { created_at: { [Op.gte]: new Date(today) } } }),
-      Booking.count({ where: { booking_status: 'confirmed' } }),
-      Driver.count(),
-      Driver.count({ where: { status: 'Approve', block_status: 'Unblock' } }),
-      Vehicle.count(),
-      Vehicle.count({ where: { status: 'Active' } }),
-      Passenger.count(),
-      Payment.sum('amount', { where: { status: 'captured' } }),
-      Payment.sum('amount', { where: { status: 'captured', created_at: { [Op.gte]: new Date(today) } } }),
-      Refund.count({ where: { status: 'pending' } }),
-      Booking.count({ where: { booking_status: 'cancelled' } }),
+      Trip.count({ where: ownerTripWhere }),
+      Trip.count({ where: { ...ownerTripWhere, trip_date: today } }),
+      Trip.count({ where: { ...ownerTripWhere, status: 'Active' } }),
+      Booking.count({ where: ownerBookingWhere }),
+      Booking.count({ where: { ...ownerBookingWhere, created_at: { [Op.gte]: new Date(today) } } }),
+      Booking.count({ where: { ...ownerBookingWhere, booking_status: 'confirmed' } }),
+      Driver.count({ where: ownerDriverWhere }),
+      Driver.count({ where: { ...ownerDriverWhere, status: 'Approve', block_status: 'Unblock' } }),
+      Vehicle.count({ where: ownerVehicleWhere }),
+      Vehicle.count({ where: { ...ownerVehicleWhere, status: 'Active' } }),
+      isOwner ? Booking.count({ distinct: true, col: 'passenger_id', where: ownerBookingWhere }) : Passenger.count(),
+      Payment.sum('amount', { where: { ...ownerPaymentWhere, status: 'captured' } }),
+      Payment.sum('amount', { where: { ...ownerPaymentWhere, status: 'captured', created_at: { [Op.gte]: new Date(today) } } }),
+      Refund.count({ where: { ...(isOwner ? { booking_id: { [Op.in]: ownerBookingIds } } : {}), status: 'pending' } }),
+      Booking.count({ where: { ...ownerBookingWhere, booking_status: 'cancelled' } }),
     ]);
 
     // Monthly revenue (last 6 months)
@@ -43,7 +61,7 @@ exports.stats = async (req, res, next) => {
         [fn('SUM', col('amount')), 'revenue'],
         [fn('COUNT', col('id')), 'transactions'],
       ],
-      where: { status: 'captured', created_at: { [Op.gte]: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } },
+      where: { ...ownerPaymentWhere, status: 'captured', created_at: { [Op.gte]: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } },
       group: [literal('month')],
       order: [[literal('month'), 'ASC']],
     });
@@ -51,11 +69,34 @@ exports.stats = async (req, res, next) => {
     // Bookings by status
     const bookingsByStatus = await Booking.findAll({
       attributes: ['booking_status', [fn('COUNT', col('id')), 'count']],
+      where: ownerBookingWhere,
       group: ['booking_status'],
+    });
+
+    const vehicleStatusChart = await Vehicle.findAll({
+      attributes: ['status', [fn('COUNT', col('id')), 'count']],
+      where: ownerVehicleWhere,
+      group: ['status'],
+      raw: true,
+    });
+
+    const driverStatusChart = await Driver.findAll({
+      attributes: ['status', [fn('COUNT', col('id')), 'count']],
+      where: ownerDriverWhere,
+      group: ['status'],
+      raw: true,
+    });
+
+    const tripStatusChart = await Trip.findAll({
+      attributes: ['status', [fn('COUNT', col('id')), 'count']],
+      where: ownerTripWhere,
+      group: ['status'],
+      raw: true,
     });
 
     // Recent bookings
     const recentBookings = await Booking.findAll({
+      where: ownerBookingWhere,
       limit: 10,
       order: [['created_at', 'DESC']],
       include: [
@@ -71,7 +112,7 @@ exports.stats = async (req, res, next) => {
       group: ['trip_id', 'trip.id', 'trip.schedule_code', 'trip.route.id', 'trip.route.route_name', 'trip.route.origin_city', 'trip.route.destination_city'],
       order: [[literal('booking_count'), 'DESC']],
       limit: 5,
-      where: { booking_status: 'confirmed' },
+      where: { ...ownerBookingWhere, booking_status: 'confirmed' },
     });
 
     res.json({
@@ -86,7 +127,13 @@ exports.stats = async (req, res, next) => {
           revenue: { total: totalRevenue || 0, today: todayRevenue || 0 },
           refunds: { pending: pendingRefunds },
         },
-        charts: { revenue: revenueChart, bookingsByStatus },
+        charts: {
+          revenue: revenueChart,
+          bookingsByStatus,
+          vehicleStatus: vehicleStatusChart,
+          driverStatus: driverStatusChart,
+          tripStatus: tripStatusChart,
+        },
         recentBookings,
         topRoutes,
       },

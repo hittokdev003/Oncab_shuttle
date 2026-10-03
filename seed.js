@@ -107,6 +107,16 @@ const seedDatabase = async () => {
       },
     });
 
+    const [ownerRole] = await Role.findOrCreate({
+      where: { name: 'owner' },
+      defaults: {
+        name: 'owner',
+        display_name: 'Owner',
+        description: 'Fleet owner access to own vehicles, drivers, and fleet dashboard',
+        is_active: true,
+      },
+    });
+
     // Assign all permissions to admin
     await adminRole.setPermissions(permissions);
 
@@ -129,6 +139,19 @@ const seedDatabase = async () => {
       'audit_logs.read',
     ]);
     await accountantRole.setPermissions(permissions.filter((permission) => accountantPermissionNames.has(permission.name)));
+
+    const ownerPermissionNames = new Set([
+      'dashboard.read',
+      'drivers.read',
+      'drivers.create',
+      'drivers.update',
+      'vehicles.read',
+      'vehicles.manage',
+      'locations.read',
+      'bookings.read',
+      'reports.read',
+    ]);
+    await ownerRole.setPermissions(permissions.filter((permission) => ownerPermissionNames.has(permission.name)));
 
     // 3. Create Default Super Admin User
     console.log('Seeding admin user...');
@@ -163,6 +186,19 @@ const seedDatabase = async () => {
         is_active: true,
       });
       console.log('✅ Operator user created: operator@oncabshuttle.com / Operator@1234');
+    }
+
+    let ownerUser = await AdminUser.findOne({ where: { email: 'owner@oncabshuttle.com' } });
+    if (!ownerUser) {
+      ownerUser = await AdminUser.create({
+        name: 'Fleet Owner',
+        email: 'owner@oncabshuttle.com',
+        password: 'Owner@1234',
+        phone: '+91 98765 00003',
+        role_id: ownerRole.id,
+        is_active: true,
+      });
+      console.log('✅ Owner user created: owner@oncabshuttle.com / Owner@1234');
     }
 
     // 4. Default Bus Types

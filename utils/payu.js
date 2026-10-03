@@ -4,7 +4,9 @@ const crypto = require('crypto');
 
 const getPayUConfig = () => {
   const key = process.env.PAYU_KEY;
-  const salt = process.env.PAYU_SALT;
+  const salt = process.env.PAYU_SALT; 
+  console.log(key,salt);
+  
   if (!key || !salt) throw new Error('PayU is not configured. Set PAYU_KEY and PAYU_SALT.');
   return {
     key,

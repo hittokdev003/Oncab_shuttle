@@ -146,7 +146,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, isO
   const roleBadgeColor = user?.role?.name === 'admin' ? '#6366f1' : '#10b981';
   const visibleGroups = NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.permission || hasPermission(item.permission)),
+    items: group.items.filter((item) =>
+      (item.id !== 'vehicle-docs' || user?.role?.name !== 'owner') &&
+      (!item.permission || hasPermission(item.permission))
+    ),
   })).filter((group) => group.items.length > 0);
 
   return (

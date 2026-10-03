@@ -5,6 +5,8 @@ import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 
 interface UsersPageProps { onNotify: (msg: string, type?: any) => void; }
 
+const ADMIN_ROLE_ID = 1;
+
 export const UsersPage: React.FC<UsersPageProps> = ({ onNotify }) => {
   const [users, setUsers] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
@@ -24,9 +26,10 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNotify }) => {
     try {
       setLoading(true); setError('');
       const [ur, rr] = await Promise.all([usersAPI.list({ page, limit: 15, search }), rolesAPI.list()]);
-      setUsers(ur.data.data);
+      const visibleRoles = (rr.data.data || []).filter((role: any) => Number(role.id) !== ADMIN_ROLE_ID);
+      setUsers((ur.data.data || []).filter((user: any) => Number(user.role_id) !== ADMIN_ROLE_ID));
       setPagination(ur.data.pagination);
-      setRoles(rr.data.data);
+      setRoles(visibleRoles);
     } catch (e: any) { setError(e.response?.data?.message || 'Failed'); }
     finally { setLoading(false); }
   }, [page, search]);
@@ -35,11 +38,22 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onNotify }) => {
   useEffect(() => { setPage(1); }, [search]);
 
   const openCreate = () => { setEditUser(null); setForm({ name: '', email: '', password: '', phone: '', role_id: '' }); setShowModal(true); };
-  const openEdit = (u: any) => { setEditUser(u); setForm({ name: u.name, email: u.email, password: '', phone: u.phone || '', role_id: String(u.role_id || '') }); setShowModal(true); };
+  const openEdit = (u: any) => {
+    setEditUser(u);
+    setForm({
+      name: u.name,
+      email: u.email,
+      password: '',
+      phone: u.phone || '',
+      role_id: Number(u.role_id) === ADMIN_ROLE_ID ? '' : String(u.role_id || ''),
+    });
+    setShowModal(true);
+  };
   const f = (k: keyof typeof form) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
   const handleSave = async () => {
     if (!form.name || !form.email || !form.role_id) { onNotify('Name, email and role are required', 'error'); return; }
+    if (Number(form.role_id) === ADMIN_ROLE_ID) { onNotify('Admin role cannot be assigned from this panel', 'error'); return; }
     if (!editUser && !form.password) { onNotify('Password is required', 'error'); return; }
     setSaving(true);
     try {

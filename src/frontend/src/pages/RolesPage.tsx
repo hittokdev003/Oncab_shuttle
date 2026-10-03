@@ -26,7 +26,7 @@ export const RolesPage: React.FC<RolesPageProps> = ({ onNotify }) => {
     try {
       setLoading(true); setError('');
       const [rr, pr] = await Promise.all([rolesAPI.list(), rolesAPI.listPermissions()]);
-      setRoles(rr.data.data);
+      setRoles((rr.data.data || []).filter((role: any) => Number(role.id) !== 1));
       setPermissions(pr.data.data.grouped || {});
     } catch (e: any) { setError(e.response?.data?.message || 'Failed'); }
     finally { setLoading(false); }
@@ -95,7 +95,7 @@ export const RolesPage: React.FC<RolesPageProps> = ({ onNotify }) => {
       </div>
       {error ? <ErrorState message={error} onRetry={fetch} /> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {roles.map((role) => (
+          {roles.filter((role) => Number(role.id) !== 1).map((role) => (
             <Card key={role.id}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">

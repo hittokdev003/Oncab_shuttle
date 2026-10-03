@@ -5,6 +5,7 @@ const sequelize = require('../config/database');
 
 const Vehicle = sequelize.define('Vehicle', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  owner_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },
   driver_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },
   vehicle_type_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },
   bus_type_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },

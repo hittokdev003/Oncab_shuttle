@@ -25,13 +25,17 @@ const findNearestStop = (latitude, longitude, stops) => {
 exports.dashboard = async (req, res, next) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
+    const isOwner = req.user?.role?.name === 'owner';
+    const ownerVehicleWhere = isOwner ? { owner_id: req.user.id } : {};
+    const ownerDriverWhere = isOwner ? { owner_id: req.user.id } : {};
     const [vehicles, trips, routes] = await Promise.all([
       Vehicle.findAll({
-        attributes: ['id', 'registration_number', 'company_model', 'status', 'latitude', 'longitude', 'driver_id', 'bus_type_id'],
+        where: ownerVehicleWhere,
+        attributes: ['id', 'registration_number', 'company_model', 'status', 'latitude', 'longitude', 'driver_id', 'bus_type_id', 'owner_id'],
         include: [{
           model: Driver,
           as: 'driver',
-          attributes: ['id', 'name', 'mobile', 'online_status'],
+          attributes: ['id', 'name', 'mobile', 'online_status', 'owner_id'],
           include: [{ model: DriverDetail, as: 'details', attributes: ['latitude', 'longitude', 'location_speed_kmh', 'location_heading', 'location_trip_id', 'updated_at'] }],
         }],
         order: [['registration_number', 'ASC']],
@@ -61,7 +65,17 @@ exports.dashboard = async (req, res, next) => {
       }),
     ]);
 
-    const serializedTrips = trips.map((trip) => {
+    const ownedVehicleIds = vehicles.map((vehicle) => Number(vehicle.id));
+    const ownedDriverIds = vehicles.map((vehicle) => Number(vehicle.driver_id)).filter(Boolean);
+    const filteredTrips = isOwner
+      ? trips.filter((trip) => {
+          const tripVehicleId = Number(trip.vehicle_id);
+          const tripDriverId = Number(trip.driver_id);
+          return (tripVehicleId && ownedVehicleIds.includes(tripVehicleId)) || (tripDriverId && ownedDriverIds.includes(tripDriverId));
+        })
+      : trips;
+
+    const serializedTrips = filteredTrips.map((trip) => {
       const data = trip.toJSON();
       data.route?.stops?.sort((a, b) => a.stop_sequence - b.stop_sequence);
       return data;

@@ -47,6 +47,10 @@ Permission.belongsToMany(Role, {
 // ─── AdminUser Associations ──────────────────────────────
 AdminUser.belongsTo(Role, { foreignKey: 'role_id', as: 'role' });
 Role.hasMany(AdminUser, { foreignKey: 'role_id', as: 'admin_users' });
+AdminUser.hasMany(Vehicle, { foreignKey: 'owner_id', as: 'owned_vehicles' });
+Vehicle.belongsTo(AdminUser, { foreignKey: 'owner_id', as: 'owner' });
+AdminUser.hasMany(Driver, { foreignKey: 'owner_id', as: 'owned_drivers' });
+Driver.belongsTo(AdminUser, { foreignKey: 'owner_id', as: 'owner' });
 
 // ─── Driver Associations ─────────────────────────────────
 Driver.hasOne(DriverDetail, { foreignKey: 'driver_id', as: 'details', onDelete: 'CASCADE' });

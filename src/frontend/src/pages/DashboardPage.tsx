@@ -5,6 +5,7 @@ import {
   CheckCircle, Clock, XCircle, ArrowUpRight
 } from 'lucide-react';
 import { dashboardAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { StatCard, Card, LoadingState, ErrorState, StatusBadge } from '../components/ui';
 
 interface DashboardStats {
@@ -17,6 +18,11 @@ interface DashboardStats {
     revenue: { total: number; today: number };
     refunds: { pending: number };
   };
+  charts?: {
+    vehicleStatus?: any[];
+    driverStatus?: any[];
+    tripStatus?: any[];
+  };
   recentBookings: any[];
   topRoutes: any[];
 }
@@ -27,6 +33,8 @@ export const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { user } = useAuth();
+  const isOwner = user?.role?.name === 'owner';
 
   const fetchStats = async () => {
     try {
@@ -48,6 +56,111 @@ export const DashboardPage: React.FC = () => {
   if (!stats) return null;
 
   const { summary, recentBookings = [], topRoutes = [] } = stats;
+
+  const renderChartCard = (title: string, rows: any[], labelKey: string, valueKey: string, color: string) => {
+    const values = rows.map((row) => Number(row[valueKey] || 0));
+    const maxValue = Math.max(...values, 1);
+    return (
+      <Card key={title}>
+        <h3 className="text-white font-semibold text-sm mb-4">{title}</h3>
+        <div className="space-y-3">
+          {rows.length === 0 ? (
+            <div className="text-sm text-slate-500">No data</div>
+          ) : rows.map((row, index) => (
+            <div key={`${title}-${index}`}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-slate-400">{row[labelKey] || 'Unknown'}</span>
+                <span className="text-slate-200">{row[valueKey] || 0}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-800/80">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${((Number(row[valueKey] || 0) / maxValue) * 100)}%`, background: color }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    );
+  };
+
+  if (isOwner) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl p-6 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(59, 130, 246, 0.12) 100%)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+          <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full opacity-10" style={{ background: 'radial-gradient(#10b981, transparent)' }} />
+          <div className="relative">
+            <p className="text-slate-300 text-sm font-medium">Owner Fleet Overview</p>
+            <h2 className="text-3xl font-bold text-white mt-1">{summary.vehicles.total} vehicles • {summary.drivers.total} drivers</h2>
+            <div className="flex items-center gap-4 mt-3 text-sm">
+              <span className="text-emerald-400">{summary.vehicles.active} active vehicles</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-indigo-300">{summary.drivers.active} active drivers</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard title="My Vehicles" value={summary.vehicles.total} icon={Truck} color="#f59e0b" subtitle={`${summary.vehicles.active} active`} />
+          <StatCard title="My Drivers" value={summary.drivers.total} icon={UserRound} color="#8b5cf6" subtitle={`${summary.drivers.active} active`} />
+          <StatCard title="Active Trips" value={summary.trips.active} icon={Bus} color="#10b981" subtitle={`${summary.trips.today} today`} />
+          <StatCard title="Fleet Revenue" value={formatCurrency(summary.revenue.total)} icon={TrendingUp} color="#06b6d4" subtitle={`${formatCurrency(summary.revenue.today)} today`} />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {renderChartCard('Vehicle Status', stats.charts?.vehicleStatus || [], 'status', 'count', '#f59e0b')}
+          {renderChartCard('Driver Status', stats.charts?.driverStatus || [], 'status', 'count', '#8b5cf6')}
+          {renderChartCard('Trip Status', stats.charts?.tripStatus || [], 'status', 'count', '#10b981')}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card padding={false}>
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'rgba(99, 102, 241, 0.1)' }}>
+              <h3 className="text-white font-semibold text-sm">Fleet Activity</h3>
+            </div>
+            <div className="space-y-4 p-5">
+              {[
+                { label: 'Confirmed bookings', value: summary.bookings.confirmed, color: '#10b981' },
+                { label: 'Cancelled bookings', value: summary.bookings.cancelled, color: '#ef4444' },
+                { label: 'Refund requests', value: summary.refunds.pending, color: '#f97316' },
+              ].map((item) => (
+                <div key={item.label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-400">{item.label}</span>
+                    <span className="text-slate-200">{item.value}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-800/80">
+                    <div className="h-full rounded-full" style={{ width: `${Math.min((item.value / Math.max(summary.bookings.total, 1)) * 100, 100)}%`, background: item.color }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card padding={false}>
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'rgba(99, 102, 241, 0.1)' }}>
+              <h3 className="text-white font-semibold text-sm">Top Routes</h3>
+            </div>
+            <div className="divide-y p-2">
+              {topRoutes.length === 0 ? (
+                <div className="py-4 text-center text-slate-500 text-xs">No route data</div>
+              ) : topRoutes.slice(0, 5).map((r: any, i: number) => (
+                <div key={r.trip_id} className="flex items-center gap-3 p-3 rounded-lg">
+                  <span className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold text-white" style={{ background: i === 0 ? '#10b981' : i === 1 ? '#6366f1' : '#8b5cf6' }}>{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-xs font-medium truncate">{r.trip?.route?.route_name || r.trip?.schedule_code}</p>
+                    <p className="text-slate-500 text-xs">{r.trip?.route?.origin_city} → {r.trip?.route?.destination_city}</p>
+                  </div>
+                  <span className="text-indigo-300 text-xs font-semibold">{r.booking_count}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

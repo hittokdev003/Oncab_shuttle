@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Edit2, Trash2, Phone, Mail, MapPin, Upload, Image, CheckCircle2, X, Eye, FileText } from 'lucide-react';
-import { driversAPI, vehiclesAPI } from '../services/api';
+import { driversAPI, rolesAPI, vehiclesAPI, usersAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { Card, Table, Tr, Td, Pagination, SearchInput, Button, Select, StatusBadge, Modal, ConfirmDialog, LoadingState, ErrorState, EmptyState, Badge } from '../components/ui';
 
 interface Driver {
@@ -20,6 +21,7 @@ interface Driver {
   aadhar: string;
   pan: string;
   address: string;
+  owner_id?: number | null;
   created_at: string;
   details?: any;
 }
@@ -45,7 +47,12 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 15 });
   const [busTypes, setBusTypes] = useState<Array<{ id: number; name: string }>>([]);
+  const [owners, setOwners] = useState<any[]>([]);
+  const [ownersLoading, setOwnersLoading] = useState(false);
+  const [ownersLoadError, setOwnersLoadError] = useState('');
   const latestFetchId = useRef(0);
+  const { user } = useAuth();
+  const isOwner = user?.role?.name === 'owner';
 
   const [showModal, setShowModal] = useState(false);
   const [editDriver, setEditDriver] = useState<Driver | null>(null);
@@ -72,6 +79,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
     complete_status: 'Incomplete',
     is_bus_driver: false,
     preferred_bus_type_id: '',
+    owner_id: '',
   });
 
   const fetchDrivers = useCallback(async () => {
@@ -99,6 +107,56 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
     vehiclesAPI.busTypes()
       .then((response) => setBusTypes(response.data.data || []))
       .catch(() => setBusTypes([]));
+
+    if (!isOwner) {
+      const loadOwners = async () => {
+        setOwnersLoading(true);
+        setOwnersLoadError('');
+        try {
+          let ownerRoleId: number | undefined;
+          try {
+            const rolesResponse = await rolesAPI.list();
+            const ownerRole = (rolesResponse.data.data || []).find((role: any) => role.name?.toLowerCase() === 'owner');
+            ownerRoleId = ownerRole ? Number(ownerRole.id) : undefined;
+          } catch {
+            // The users response also includes the role for fallback matching.
+          }
+
+          const fetchUserPages = async (roleId?: number) => {
+            const firstPage = await usersAPI.list({ page: 1, limit: 100, ...(roleId ? { role_id: roleId } : {}) });
+            const pages = Number(firstPage.data.pagination?.pages || 1);
+            const remainingPages = await Promise.all(
+              Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
+                usersAPI.list({ page: index + 2, limit: 100, ...(roleId ? { role_id: roleId } : {}) })
+              )
+            );
+            return [
+              ...(firstPage.data.data || []),
+              ...remainingPages.flatMap((response) => response.data.data || []),
+            ];
+          };
+
+          let ownerUsers = ownerRoleId
+            ? await fetchUserPages(ownerRoleId)
+            : (await fetchUserPages()).filter((entry: any) => entry.role?.name?.toLowerCase() === 'owner');
+
+          if (ownerRoleId && ownerUsers.length === 0) {
+            ownerUsers = (await fetchUserPages()).filter((entry: any) =>
+              entry.role?.name?.toLowerCase() === 'owner' || Number(entry.role_id) === ownerRoleId
+            );
+          }
+
+          setOwners(ownerUsers);
+        } catch (error: any) {
+          setOwners([]);
+          setOwnersLoadError(error.response?.data?.message || 'Could not load owner users');
+        } finally {
+          setOwnersLoading(false);
+        }
+      };
+
+      loadOwners();
+    }
   }, []);
 
   useEffect(() => {
@@ -121,6 +179,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
       complete_status: 'Incomplete',
       is_bus_driver: false,
       preferred_bus_type_id: '',
+      owner_id: isOwner ? String(user?.id || '') : '',
     });
     setShowModal(true);
   };
@@ -141,6 +200,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
       complete_status: d.complete_status || 'Incomplete',
       is_bus_driver: Boolean(d.is_bus_driver),
       preferred_bus_type_id: d.preferred_bus_type_id ? String(d.preferred_bus_type_id) : '',
+      owner_id: isOwner ? String(user?.id || '') : String(d.owner_id || ''),
     });
     setShowModal(true);
   };
@@ -168,17 +228,29 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
       onNotify('Full Name and Mobile are required', 'error');
       return;
     }
+    if (isOwner && !user?.id) {
+      onNotify('Owner context is missing', 'error');
+      return;
+    }
+    if (!isOwner && !form.owner_id) {
+      onNotify('Please select an owner for this driver', 'error');
+      return;
+    }
     if (form.is_bus_driver && !form.preferred_bus_type_id) {
       onNotify('Select a preferred bus type for this bus driver', 'error');
       return;
     }
     setSaving(true);
     try {
+      const payload = {
+        ...form,
+        owner_id: isOwner ? Number(user?.id) : Number(form.owner_id),
+      };
       if (editDriver) {
-        await driversAPI.update(editDriver.id, form);
+        await driversAPI.update(editDriver.id, payload);
         onNotify('Driver updated successfully');
       } else {
-        await driversAPI.create(form);
+        await driversAPI.create(payload);
         onNotify('Driver created successfully');
       }
       setShowModal(false);
@@ -557,6 +629,27 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                   </div>
                 )}
               </div>
+
+              {!isOwner && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Owner <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={form.owner_id}
+                    onChange={(event) => setForm({ ...form, owner_id: event.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="">
+                      {ownersLoading ? 'Loading owners...' : ownersLoadError || (owners.length ? 'Select owner' : 'No owner users found')}
+                    </option>
+                    {owners.map((owner) => (
+                      <option key={owner.id} value={String(owner.id)}>{owner.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Gender & Approval Status */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

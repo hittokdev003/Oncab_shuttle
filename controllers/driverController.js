@@ -16,6 +16,13 @@ const buildPagination = (page, limit) => {
     return { offset: (p - 1) * l, limit: l, page: p };
 };
 
+const isOwnerRole = (req) => req.user && req.user.role && req.user.role.name === 'owner';
+
+const forceOwnerScope = (req, where = {}) => {
+    if (!isOwnerRole(req)) return where;
+    return { ...where, owner_id: req.user.id };
+};
+
 // ── List Drivers ───────────────────────────────────────────
 exports.list = async (req, res, next) => {
     try {
@@ -35,8 +42,10 @@ exports.list = async (req, res, next) => {
         if (online_status) where.online_status = online_status;
         if (block_status) where.block_status = block_status;
 
+        const ownerScopedWhere = forceOwnerScope(req, where);
+
         const { count, rows } = await Driver.findAndCountAll({
-            where,
+            where: ownerScopedWhere,
             include: [
                 { model: DriverDetail, as: 'details' },
                 { model: Vehicle, as: 'vehicles' },
@@ -81,6 +90,9 @@ exports.show = async (req, res, next) => {
             include: [{ model: DriverDetail, as: 'details' }, { model: Vehicle, as: 'vehicles' }],
         });
         if (!driver) return res.status(404).json({ success: false, message: 'Driver not found' });
+        if (isOwnerRole(req) && Number(driver.owner_id) !== Number(req.user.id)) {
+            return res.status(403).json({ success: false, message: 'You can only view your own drivers' });
+        }
 
         const data = driver.toJSON();
         if (data.details) {
@@ -105,14 +117,19 @@ exports.show = async (req, res, next) => {
 // ── Create Driver ──────────────────────────────────────────
 exports.create = async (req, res, next) => {
   try {
-        const { name, email, mobile, aadhar, pan, sex, address, status, aadhar_img, pan_img, details, is_bus_driver, preferred_bus_type_id } = req.body;
+        const { name, email, mobile, aadhar, pan, sex, address, status, aadhar_img, pan_img, details, is_bus_driver, preferred_bus_type_id, owner_id } = req.body;
         if (is_bus_driver && !preferred_bus_type_id) {
             return res.status(400).json({ success: false, message: 'Preferred bus type is required for bus drivers' });
+        }
+        const ownerId = isOwnerRole(req) ? req.user.id : owner_id || null;
+        if (isOwnerRole(req) && Number(ownerId) !== Number(req.user.id)) {
+            return res.status(403).json({ success: false, message: 'Owner assignment is restricted to your own fleet' });
         }
     const driver = await Driver.create({
       name,
       email,
       mobile,
+            owner_id: ownerId,
             vehicle_type_id: is_bus_driver ? 6 : undefined,
             is_bus_driver: Boolean(is_bus_driver),
             preferred_bus_type_id: is_bus_driver ? preferred_bus_type_id : null,
@@ -175,6 +192,9 @@ exports.update = async (req, res, next) => {
         if (!driver) {
             return res.status(404).json({ success: false, message: 'Driver not found' });
         }
+        if (isOwnerRole(req) && Number(driver.owner_id) !== Number(req.user.id)) {
+            return res.status(403).json({ success: false, message: 'You can only edit your own drivers' });
+        }
         if (req.body.is_bus_driver && !req.body.preferred_bus_type_id) {
             return res.status(400).json({ success: false, message: 'Preferred bus type is required for bus drivers' });
         }
@@ -214,6 +234,11 @@ exports.update = async (req, res, next) => {
             if (newPanImg) uploadedFiles.push(newPanImg);
 
             const driverPayload = {};
+            if (isOwnerRole(req)) {
+                driverPayload.owner_id = req.user.id;
+            } else if (req.body.owner_id !== undefined) {
+                driverPayload.owner_id = req.body.owner_id || null;
+            }
             for (const field of ['name', 'email', 'mobile', 'aadhar', 'pan', 'sex', 'address', 'status', 'block_status', 'online_status', 'is_bus_driver', 'preferred_bus_type_id']) {
                 if (req.body[field] !== undefined) driverPayload[field] = req.body[field];
             }

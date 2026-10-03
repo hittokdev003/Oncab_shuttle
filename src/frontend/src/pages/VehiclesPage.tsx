@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, FileText, AlertTriangle, Upload, FilePlus, Calendar, Eye, X } from 'lucide-react';
-import { vehiclesAPI } from '../services/api';
+import { driversAPI, rolesAPI, usersAPI, vehiclesAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { Card, Table, Tr, Td, Pagination, SearchInput, Button, Select, StatusBadge, Modal, Input, ConfirmDialog, ErrorState, Badge } from '../components/ui';
 
 interface Vehicle {
   id: number;
+  owner_id?: number | null;
+  driver_id?: number | null;
   registration_number: string;
   company_model: string;
   engine_type: string;
@@ -28,12 +31,18 @@ const DOC_HEADERS = ['Vehicle', 'Doc Type', 'Doc Number', 'Issue Date', 'Expiry 
 
 export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }) => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [owners, setOwners] = useState<any[]>([]);
+  const [ownersLoading, setOwnersLoading] = useState(false);
+  const [ownersLoadError, setOwnersLoadError] = useState('');
+  const [drivers, setDrivers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 15 });
+  const { user } = useAuth();
+  const isOwner = user?.role?.name === 'owner';
 
   // Vehicle modal
   const [showModal, setShowModal] = useState(false);
@@ -42,6 +51,8 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
+    owner_id: '',
+    driver_id: '',
     registration_number: '',
     company_model: '',
     engine_type: '',
@@ -68,6 +79,66 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
   });
 
   const [expiringDocs, setExpiringDocs] = useState<any[]>([]);
+
+  const selectableDrivers = form.owner_id
+    ? drivers.filter((driver) => String(driver.owner_id ?? '') === String(form.owner_id))
+    : drivers.filter((driver) => isOwner ? String(driver.owner_id ?? '') === String(user?.id ?? '') : true);
+
+  useEffect(() => {
+    if (!isOwner) {
+      const loadOwners = async () => {
+        setOwnersLoading(true);
+        setOwnersLoadError('');
+        try {
+          let ownerRoleId: number | undefined;
+          try {
+            const rolesResponse = await rolesAPI.list();
+            const ownerRole = (rolesResponse.data.data || []).find((role: any) => role.name?.toLowerCase() === 'owner');
+            ownerRoleId = ownerRole ? Number(ownerRole.id) : undefined;
+          } catch {
+            // Fall back to the user list, which includes each user's role.
+          }
+
+          const fetchUserPages = async (roleId?: number) => {
+            const firstPage = await usersAPI.list({ page: 1, limit: 100, ...(roleId ? { role_id: roleId } : {}) });
+            const pages = Number(firstPage.data.pagination?.pages || 1);
+            const remainingPages = await Promise.all(
+              Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
+                usersAPI.list({ page: index + 2, limit: 100, ...(roleId ? { role_id: roleId } : {}) })
+              )
+            );
+            return [
+              ...(firstPage.data.data || []),
+              ...remainingPages.flatMap((response) => response.data.data || []),
+            ];
+          };
+
+          let ownerUsers = ownerRoleId
+            ? await fetchUserPages(ownerRoleId)
+            : (await fetchUserPages()).filter((entry: any) => entry.role?.name?.toLowerCase() === 'owner');
+
+          if (ownerRoleId && ownerUsers.length === 0) {
+            ownerUsers = (await fetchUserPages()).filter((entry: any) =>
+              entry.role?.name?.toLowerCase() === 'owner' || Number(entry.role_id) === ownerRoleId
+            );
+          }
+
+          setOwners(ownerUsers);
+        } catch (error: any) {
+          setOwners([]);
+          setOwnersLoadError(error.response?.data?.message || 'Could not load owner users');
+        } finally {
+          setOwnersLoading(false);
+        }
+      };
+
+      loadOwners();
+    }
+
+    driversAPI.list({ page: 1, limit: 200 })
+      .then((response) => setDrivers(response.data.data || []))
+      .catch(() => setDrivers([]));
+  }, [isOwner]);
 
   const fetchVehicles = useCallback(async () => {
     try {
@@ -99,6 +170,8 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
   const openCreate = () => {
     setEditVehicle(null);
     setForm({
+      owner_id: isOwner ? String(user?.id || '') : '',
+      driver_id: '',
       registration_number: '',
       company_model: '',
       engine_type: 'electric',
@@ -113,6 +186,8 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
   const openEdit = (v: Vehicle) => {
     setEditVehicle(v);
     setForm({
+      owner_id: isOwner ? String(user?.id || '') : String(v.owner_id || ''),
+      driver_id: v.driver_id ? String(v.driver_id) : '',
       registration_number: v.registration_number,
       company_model: v.company_model || '',
       engine_type: v.engine_type || '',
@@ -166,19 +241,30 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
   const duplicateDocType = Boolean(selectedDocVehicle?.documents?.some((document: any) =>
     document.doc_type === docForm.doc_type && document.id !== editDocument?.id
   ));
+  const canManageVehicleDocuments = !isOwner;
 
   const handleSaveVehicle = async () => {
     if (!form.registration_number) {
       onNotify('Registration number is required', 'error');
       return;
     }
+    if (!isOwner && !form.owner_id) {
+      onNotify('Please select an owner', 'error');
+      return;
+    }
     setSaving(true);
     try {
+      const payload = {
+        ...form,
+        owner_id: isOwner ? Number(user?.id) : Number(form.owner_id),
+        driver_id: form.driver_id ? Number(form.driver_id) : null,
+        total_seats: Number(form.total_seats || 0),
+      };
       if (editVehicle) {
-        await vehiclesAPI.update(editVehicle.id, form);
+        await vehiclesAPI.update(editVehicle.id, payload);
         onNotify('Vehicle updated successfully');
       } else {
-        await vehiclesAPI.create(form);
+        await vehiclesAPI.create(payload);
         onNotify('Vehicle created successfully');
       }
       setShowModal(false);
@@ -250,6 +336,22 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
       setDeleting(false);
     }
   };
+
+  if (showDocs && isOwner) {
+    return (
+      <div className="space-y-5">
+        <Card>
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-amber-400 mt-0.5" size={18} />
+            <div>
+              <h2 className="text-lg font-semibold text-white">Document access restricted</h2>
+              <p className="text-sm text-slate-300 mt-1">Owners can manage their own vehicles and assignments, but they cannot view or edit vehicle documents.</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   // If showing standalone "Vehicle Documents" view
   if (showDocs) {
@@ -498,9 +600,11 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
           <p className="text-slate-400 text-sm">{pagination.total} vehicles registered</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="secondary" onClick={() => openAddDocument()} icon={FilePlus}>
-            + Add Document
-          </Button>
+          {canManageVehicleDocuments && (
+            <Button variant="secondary" onClick={() => openAddDocument()} icon={FilePlus}>
+              + Add Document
+            </Button>
+          )}
           <Button onClick={openCreate} icon={Plus}>
             Add Vehicle
           </Button>
@@ -649,28 +753,34 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
                     <Badge color="blue">{v.total_seats} seats</Badge>
                   </Td>
                   <Td>
-                    <button
-                      onClick={() => setSelectedVehicleForDocs(v)}
-                      className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                      title="View & Add documents"
-                    >
-                      <FileText size={13} />
-                      <span>{v.documents?.length || 0} Docs</span>
-                    </button>
+                    {canManageVehicleDocuments ? (
+                      <button
+                        onClick={() => setSelectedVehicleForDocs(v)}
+                        className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                        title="View & Add documents"
+                      >
+                        <FileText size={13} />
+                        <span>{v.documents?.length || 0} Docs</span>
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-500">Restricted</span>
+                    )}
                   </Td>
                   <Td>
                     <StatusBadge status={v.status} />
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1.5">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openAddDocument(v)}
-                        title="Upload document"
-                      >
-                        <FilePlus size={14} className="text-indigo-400" />
-                      </Button>
+                      {canManageVehicleDocuments && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openAddDocument(v)}
+                          title="Upload document"
+                        >
+                          <FilePlus size={14} className="text-indigo-400" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" onClick={() => openEdit(v)}>
                         <Edit2 size={13} className="text-slate-300" />
                       </Button>
@@ -710,6 +820,38 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
         }
       >
         <div className="grid grid-cols-2 gap-4">
+          {!isOwner && (
+            <div className="col-span-2">
+              <label className="mb-1 block text-xs font-medium text-slate-300">Owner</label>
+              <select
+                value={form.owner_id}
+                onChange={(e) => setForm({ ...form, owner_id: e.target.value, driver_id: '' })}
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">
+                  {ownersLoading ? 'Loading owners...' : ownersLoadError || (owners.length ? 'Select owner' : 'No owner users found')}
+                </option>
+                {owners.map((owner) => (
+                  <option key={owner.id} value={String(owner.id)}>{owner.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-300">Assigned Driver</label>
+            <select
+              value={form.driver_id}
+              onChange={(e) => setForm({ ...form, driver_id: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500"
+            >
+              <option value="">Unassigned</option>
+              {selectableDrivers.map((driver) => (
+                <option key={driver.id} value={String(driver.id)}>{driver.name}</option>
+              ))}
+            </select>
+          </div>
+
           <Input
             label="Registration Number"
             value={form.registration_number}

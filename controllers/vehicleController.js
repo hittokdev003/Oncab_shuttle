@@ -32,6 +32,13 @@ const buildPagination = (page, limit) => {
   return { offset: (p - 1) * l, limit: l, page: p };
 };
 
+const isOwnerRole = (req) => req.user && req.user.role && req.user.role.name === 'owner';
+
+const forceOwnerScope = (req, where = {}) => {
+  if (!isOwnerRole(req)) return where;
+  return { ...where, owner_id: req.user.id };
+};
+
 // ── List Vehicles ──────────────────────────────────────────
 exports.list = async (req, res, next) => {
   try {
@@ -45,13 +52,14 @@ exports.list = async (req, res, next) => {
       ];
     }
     if (status) where.status = status;
+    const ownerScopedWhere = forceOwnerScope(req, where);
 
     const { count, rows } = await Vehicle.findAndCountAll({
-      where,
+      where: ownerScopedWhere,
       include: [
         { model: Driver, as: 'driver', attributes: ['id', 'name', 'mobile'] },
         { model: BusType, as: 'bus_type', attributes: ['id', 'name', 'code'] },
-        { model: VehicleDocument, as: 'documents' },
+        ...(!isOwnerRole(req) ? [{ model: VehicleDocument, as: 'documents' }] : []),
       ],
       offset, limit: lim,
       order: [['created_at', 'DESC']],
@@ -70,10 +78,13 @@ exports.show = async (req, res, next) => {
       include: [
         { model: Driver, as: 'driver' },
         { model: BusType, as: 'bus_type' },
-        { model: VehicleDocument, as: 'documents' },
+        ...(!isOwnerRole(req) ? [{ model: VehicleDocument, as: 'documents' }] : []),
       ],
     });
     if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    if (isOwnerRole(req) && Number(vehicle.owner_id) !== Number(req.user.id)) {
+      return res.status(403).json({ success: false, message: 'You can only view your own vehicles' });
+    }
     res.json({ success: true, data: serializeVehicle(vehicle) });
   } catch (err) {
     next(err);
@@ -85,6 +96,15 @@ exports.create = async (req, res, next) => {
   let uploadedImage;
   try {
     const payload = { ...req.body };
+    if (isOwnerRole(req)) {
+      payload.owner_id = req.user.id;
+      if (payload.driver_id) {
+        const driver = await Driver.findOne({ where: { id: payload.driver_id, owner_id: req.user.id } });
+        if (!driver) {
+          return res.status(403).json({ success: false, message: 'You can only assign drivers from your fleet' });
+        }
+      }
+    }
     if (typeof payload.vehicle_img === 'string' && payload.vehicle_img.startsWith('data:')) {
       uploadedImage = saveBase64File(payload.vehicle_img, 'vehicles', 'vehicle');
       payload.vehicle_img = uploadedImage;
@@ -104,7 +124,19 @@ exports.update = async (req, res, next) => {
   try {
     const vehicle = await Vehicle.findByPk(req.params.id);
     if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    if (isOwnerRole(req) && Number(vehicle.owner_id) !== Number(req.user.id)) {
+      return res.status(403).json({ success: false, message: 'You can only edit your own vehicles' });
+    }
     const payload = { ...req.body };
+    if (isOwnerRole(req)) {
+      payload.owner_id = req.user.id;
+      if (payload.driver_id) {
+        const driver = await Driver.findOne({ where: { id: payload.driver_id, owner_id: req.user.id } });
+        if (!driver) {
+          return res.status(403).json({ success: false, message: 'You can only assign drivers from your fleet' });
+        }
+      }
+    }
     const oldImage = vehicle.vehicle_img;
     if (typeof payload.vehicle_img === 'string' && payload.vehicle_img.startsWith('data:')) {
       uploadedImage = saveBase64File(payload.vehicle_img, 'vehicles', `vehicle_${vehicle.id}`);
@@ -124,6 +156,9 @@ exports.destroy = async (req, res, next) => {
   try {
     const vehicle = await Vehicle.findByPk(req.params.id);
     if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    if (isOwnerRole(req) && Number(vehicle.owner_id) !== Number(req.user.id)) {
+      return res.status(403).json({ success: false, message: 'You can only delete your own vehicles' });
+    }
     await vehicle.destroy();
     res.json({ success: true, message: 'Vehicle deleted' });
   } catch (err) {
@@ -135,6 +170,9 @@ exports.destroy = async (req, res, next) => {
 exports.addDocument = async (req, res, next) => {
   let uploadedImage;
   try {
+    if (isOwnerRole(req)) {
+      return res.status(403).json({ success: false, message: 'Owners cannot manage vehicle documents' });
+    }
     const vehicle = await Vehicle.findByPk(req.params.id);
     if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
     const existing = await VehicleDocument.findOne({ where: { vehicle_id: vehicle.id, doc_type: req.body.doc_type } });
@@ -161,6 +199,9 @@ exports.addDocument = async (req, res, next) => {
 exports.updateDocument = async (req, res, next) => {
   let uploadedImage;
   try {
+    if (isOwnerRole(req)) {
+      return res.status(403).json({ success: false, message: 'Owners cannot manage vehicle documents' });
+    }
     const document = await VehicleDocument.findOne({
       where: { id: req.params.documentId, vehicle_id: req.params.id },
     });
@@ -195,6 +236,9 @@ exports.updateDocument = async (req, res, next) => {
 // ── Expiring Documents ─────────────────────────────────────
 exports.expiringDocuments = async (req, res, next) => {
   try {
+    if (isOwnerRole(req)) {
+      return res.status(403).json({ success: false, message: 'Owners cannot view vehicle documents' });
+    }
     const { days = 30 } = req.query;
     const threshold = new Date();
     threshold.setDate(threshold.getDate() + parseInt(days));
