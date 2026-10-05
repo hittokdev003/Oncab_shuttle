@@ -2,7 +2,7 @@
 
 Base path: `/api2/bus`
 
-Apply `migrations/passenger_wallet.sql` before deploying these endpoints.
+Apply `migrations/passenger_wallet.sql` and `migrations/passenger_ids_reference_users.sql` before deploying these endpoints. The second migration aligns booking/payment/refund passenger IDs with the `users` table.
 
 ## Read balance
 

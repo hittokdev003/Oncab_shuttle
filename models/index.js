@@ -108,10 +108,10 @@ Vehicle.hasMany(Trip, { foreignKey: 'vehicle_id', as: 'trips' });
 Booking.belongsTo(Trip, { foreignKey: 'trip_id', as: 'trip' });
 Trip.hasMany(Booking, { foreignKey: 'trip_id', as: 'bookings' });
 
-Booking.belongsTo(Passenger, { foreignKey: 'passenger_id', as: 'passenger' });
-Passenger.hasMany(Booking, { foreignKey: 'passenger_id', as: 'bookings' });
-Passenger.hasMany(WalletTransaction, { foreignKey: 'passenger_id', as: 'wallet_transactions' });
-WalletTransaction.belongsTo(Passenger, { foreignKey: 'passenger_id', as: 'passenger' });
+Booking.belongsTo(CustomerUser, { foreignKey: 'passenger_id', as: 'passenger' });
+CustomerUser.hasMany(Booking, { foreignKey: 'passenger_id', as: 'bookings' });
+CustomerUser.hasMany(WalletTransaction, { foreignKey: 'passenger_id', as: 'wallet_transactions' });
+WalletTransaction.belongsTo(CustomerUser, { foreignKey: 'passenger_id', as: 'passenger' });
 
 Booking.belongsTo(Stop, { foreignKey: 'origin_stop_id', as: 'origin_stop' });
 Booking.belongsTo(Stop, { foreignKey: 'destination_stop_id', as: 'destination_stop' });
@@ -123,8 +123,8 @@ Coupon.hasMany(Booking, { foreignKey: 'coupon_id', as: 'bookings' });
 Payment.belongsTo(Booking, { foreignKey: 'booking_id', as: 'booking' });
 Booking.hasMany(Payment, { foreignKey: 'booking_id', as: 'payments' });
 
-Payment.belongsTo(Passenger, { foreignKey: 'passenger_id', as: 'passenger' });
-Passenger.hasMany(Payment, { foreignKey: 'passenger_id', as: 'payments' });
+Payment.belongsTo(CustomerUser, { foreignKey: 'passenger_id', as: 'passenger' });
+CustomerUser.hasMany(Payment, { foreignKey: 'passenger_id', as: 'payments' });
 
 // ─── Refund Associations ─────────────────────────────────
 Refund.belongsTo(Booking, { foreignKey: 'booking_id', as: 'booking' });
@@ -133,8 +133,8 @@ Booking.hasMany(Refund, { foreignKey: 'booking_id', as: 'refunds' });
 Refund.belongsTo(Payment, { foreignKey: 'payment_id', as: 'payment' });
 Payment.hasMany(Refund, { foreignKey: 'payment_id', as: 'refunds' });
 
-Refund.belongsTo(Passenger, { foreignKey: 'passenger_id', as: 'passenger' });
-Passenger.hasMany(Refund, { foreignKey: 'passenger_id', as: 'refunds' });
+Refund.belongsTo(CustomerUser, { foreignKey: 'passenger_id', as: 'passenger' });
+CustomerUser.hasMany(Refund, { foreignKey: 'passenger_id', as: 'refunds' });
 
 // ─── Pass Associations ───────────────────────────────────
 Pass.belongsTo(Passenger, { foreignKey: 'passenger_id', as: 'passenger' });

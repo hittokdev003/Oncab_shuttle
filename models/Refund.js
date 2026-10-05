@@ -7,7 +7,7 @@ const Refund = sequelize.define('Refund', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
   booking_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   payment_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },
-  passenger_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },
+  passenger_id: { type: DataTypes.BIGINT.UNSIGNED, defaultValue: null },
   refund_reference: { type: DataTypes.STRING(50), allowNull: false, unique: true },
   refund_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   refund_method: { type: DataTypes.STRING(50), defaultValue: null },
