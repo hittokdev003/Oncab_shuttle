@@ -337,7 +337,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
           </div>
 
           {/* Row 2: SEAT CAPACITY (OPTIONAL) */}
-          <div className="max-w-xs">
+          {/* <div className="max-w-xs">
             <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 tracking-wider uppercase">
               SEAT CAPACITY (OPTIONAL)
             </label>
@@ -348,7 +348,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               onChange={(e) => setSingleForm({ ...singleForm, seat_capacity: e.target.value })}
               className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-mono"
             />
-          </div>
+          </div> */}
 
           {/* Create Trip Action Button */}
           <div>

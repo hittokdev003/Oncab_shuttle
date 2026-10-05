@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  Users, Truck, CalendarDays, Ticket, TrendingUp, CreditCard, 
-  RefreshCcw, Bell, UserRound, Bus, Route, BarChart3, AlertTriangle,
-  CheckCircle, Clock, XCircle, ArrowUpRight
+  Users, Truck, Ticket, TrendingUp, CreditCard, RefreshCcw, UserRound, Bus,
+  CheckCircle, XCircle, ArrowUpRight
 } from 'lucide-react';
 import { dashboardAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,8 +14,8 @@ interface DashboardStats {
     drivers: { total: number; active: number };
     vehicles: { total: number; active: number };
     passengers: { total: number };
-    revenue: { total: number; today: number };
-    refunds: { pending: number };
+    revenue?: { total: number; today: number };
+    refunds?: { pending: number; pendingAmount: number; completedAmount: number };
   };
   charts?: {
     vehicleStatus?: any[];
@@ -27,7 +26,7 @@ interface DashboardStats {
   topRoutes: any[];
 }
 
-const formatCurrency = (n: number) => `₹${(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+const formatCurrency = (amount: number) => `₹${(amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
 export const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -35,6 +34,7 @@ export const DashboardPage: React.FC = () => {
   const [error, setError] = useState('');
   const { user } = useAuth();
   const isOwner = user?.role?.name === 'owner';
+  const isAdmin = user?.role?.name === 'admin';
 
   const fetchStats = async () => {
     try {
@@ -101,11 +101,10 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <StatCard title="My Vehicles" value={summary.vehicles.total} icon={Truck} color="#f59e0b" subtitle={`${summary.vehicles.active} active`} />
           <StatCard title="My Drivers" value={summary.drivers.total} icon={UserRound} color="#8b5cf6" subtitle={`${summary.drivers.active} active`} />
           <StatCard title="Active Trips" value={summary.trips.active} icon={Bus} color="#10b981" subtitle={`${summary.trips.today} today`} />
-          <StatCard title="Fleet Revenue" value={formatCurrency(summary.revenue.total)} icon={TrendingUp} color="#06b6d4" subtitle={`${formatCurrency(summary.revenue.today)} today`} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -123,7 +122,6 @@ export const DashboardPage: React.FC = () => {
               {[
                 { label: 'Confirmed bookings', value: summary.bookings.confirmed, color: '#10b981' },
                 { label: 'Cancelled bookings', value: summary.bookings.cancelled, color: '#ef4444' },
-                { label: 'Refund requests', value: summary.refunds.pending, color: '#f97316' },
               ].map((item) => (
                 <div key={item.label}>
                   <div className="flex justify-between text-xs mb-1">
@@ -164,25 +162,29 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Revenue Highlight */}
-      <div className="rounded-2xl p-6 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
-        <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full opacity-10" style={{ background: 'radial-gradient(#6366f1, transparent)' }} />
-        <div className="relative">
-          <p className="text-slate-400 text-sm font-medium">Total Revenue</p>
-          <h2 className="text-4xl font-bold text-white mt-1">{formatCurrency(summary.revenue.total)}</h2>
-          <div className="flex items-center gap-4 mt-3">
-            <div className="flex items-center gap-1.5 text-emerald-400 text-sm">
-              <ArrowUpRight size={16} />
-              <span>{formatCurrency(summary.revenue.today)} today</span>
-            </div>
-            <div className="text-slate-500 text-sm">•</div>
-            <div className="flex items-center gap-1.5 text-slate-400 text-sm">
-              <RefreshCcw size={14} />
-              <span>{summary.refunds.pending} refund(s) pending</span>
+      {isAdmin && (
+        <div className="rounded-2xl p-6 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+          <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full opacity-10" style={{ background: 'radial-gradient(#6366f1, transparent)' }} />
+          <div className="relative">
+            <p className="text-slate-400 text-sm font-medium">Total Revenue</p>
+            <h2 className="text-4xl font-bold text-white mt-1">{formatCurrency(summary.revenue?.total || 0)}</h2>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
+              <div className="flex items-center gap-1.5 text-emerald-400 text-sm">
+                <ArrowUpRight size={16} />
+                <span>{formatCurrency(summary.revenue?.today || 0)} today</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-400 text-sm">
+                <RefreshCcw size={14} />
+                <span>{formatCurrency(summary.refunds?.pendingAmount || 0)} pending refunds</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-amber-300 text-sm">
+                <CreditCard size={14} />
+                <span>{formatCurrency(summary.refunds?.completedAmount || 0)} refunded</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -196,7 +198,7 @@ export const DashboardPage: React.FC = () => {
         <StatCard title="Passengers" value={summary.passengers.total} icon={Users} color="#06b6d4" />
         <StatCard title="Confirmed" value={summary.bookings.confirmed} icon={CheckCircle} color="#10b981" />
         <StatCard title="Cancelled" value={summary.bookings.cancelled} icon={XCircle} color="#ef4444" />
-        <StatCard title="Pending Refunds" value={summary.refunds.pending} icon={RefreshCcw} color="#f97316" />
+        {isAdmin && <StatCard title="Pending Refunds" value={summary.refunds?.pending || 0} icon={RefreshCcw} color="#f97316" subtitle={`${formatCurrency(summary.refunds?.pendingAmount || 0)} pending`} />}
       </div>
 
       {/* Recent Bookings + Top Routes */}
@@ -220,7 +222,7 @@ export const DashboardPage: React.FC = () => {
                   <p className="text-slate-500 text-xs">{booking.booking_reference}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-emerald-400 text-sm font-medium">₹{booking.final_amount}</p>
+                  {isAdmin && <p className="text-emerald-400 text-sm font-medium">₹{booking.final_amount}</p>}
                   <StatusBadge status={booking.booking_status} />
                 </div>
               </div>
