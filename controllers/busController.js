@@ -12,6 +12,16 @@ const buildPagination = (page, limit) => {
   return { offset: (p - 1) * l, limit: l, page: p };
 };
 
+const isDateKeyEnabled = (value) => value === true || value === 1 || ['true', '1'].includes(String(value).toLowerCase());
+
+const groupSchedulesByTripDate = (schedules) => schedules.reduce((grouped, schedule) => {
+  const tripDate = schedule.trip_date;
+  if (!tripDate) return grouped;
+  if (!grouped[tripDate]) grouped[tripDate] = [];
+  grouped[tripDate].push(schedule);
+  return grouped;
+}, {});
+
 // ── 1. Get Bus Types ─────────────────────────────────────────
 exports.getBusTypes = async (req, res, next) => {
   try {
@@ -224,7 +234,7 @@ const fetchSchedulesForRouteStopPair = async ({ routeId, pickupStopId, dropStopI
   const weekday = weekdays[isNaN(searchDateObj.getDay()) ? 1 : searchDateObj.getDay()];
 
   const dayFilteredSchedules = rawSchedules.filter((sch) => {
-    if (sch.trip_date && sch.trip_date === searchDateStr) return true;
+    if (sch.trip_date) return String(sch.trip_date).slice(0, 10) === searchDateStr;
     if (!sch.operating_days) return true;
     const operatingDays = String(sch.operating_days).toLowerCase().split(/[,:]/).map((d) => d.trim());
     return operatingDays.includes(weekday);
@@ -314,6 +324,7 @@ const fetchSchedulesForRouteStopPair = async ({ routeId, pickupStopId, dropStopI
 
     validFormattedSchedules.push({
       schedule_id: schId,
+      trip_date: sch.trip_date || searchDateStr,
       route_id: Number(route.id),
       bus_type_id: sch.bus_type_id || sch.bus_type?.id || null,
       bus_type: sch.bus_type || null,
@@ -710,31 +721,59 @@ exports.getSchedules = async (req, res, next) => {
     const route_id = req.query?.route_id || req.body?.route_id;
     const pickup_stop_id = req.query?.pickup_stop_id || req.body?.pickup_stop_id;
     const drop_stop_id = req.query?.drop_stop_id || req.body?.drop_stop_id;
-    const travel_date = req.query?.date || req.body?.date || req.query?.travel_date || req.body?.travel_date || '2026-10-05';
+    const requestedTravelDate = req.query?.date || req.body?.date || req.query?.travel_date || req.body?.travel_date;
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const travel_date = requestedTravelDate || todayStr;
     const passengers = parseInt(req.query?.passengers || req.body?.passengers || 1, 10);
+    const dateKeyEnabled = isDateKeyEnabled(req.query?.date_key ?? req.body?.date_key);
 
     if (route_id && pickup_stop_id && drop_stop_id) {
-      const scheduleRes = await fetchSchedulesForRouteStopPair({
+      let searchDates = [travel_date];
+      if (!requestedTravelDate && dateKeyEnabled) {
+        const [datedSchedules, datedTrips] = await Promise.all([
+          BusSchedule.findAll({
+            attributes: ['trip_date'],
+            where: { route_id, status: 'Active', trip_date: { [Op.gte]: todayStr } },
+            raw: true,
+          }),
+          Trip.findAll({
+            attributes: ['trip_date'],
+            where: { route_id, status: { [Op.in]: ['Active', 'Scheduled'] }, trip_date: { [Op.gte]: todayStr } },
+            raw: true,
+          }),
+        ]);
+        const upcomingDates = new Set([...datedSchedules, ...datedTrips].map((item) => item.trip_date).filter(Boolean));
+        for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+          const date = new Date(today);
+          date.setDate(today.getDate() + dayOffset);
+          upcomingDates.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`);
+        }
+        searchDates = [...upcomingDates].sort();
+      }
+
+      const scheduleResults = await Promise.all(searchDates.map((searchDate) => fetchSchedulesForRouteStopPair({
         routeId: route_id,
         pickupStopId: pickup_stop_id,
         dropStopId: drop_stop_id,
-        travelDate: travel_date,
+        travelDate: searchDate,
         passengers,
-      });
+      })));
+      const foundSchedules = scheduleResults.flatMap((result) => result.success ? result.schedules : []);
 
-      if (!scheduleRes.success) {
+      if (foundSchedules.length === 0) {
         return res.json({
           status: false,
-          message: scheduleRes.reason || 'No schedules found',
+          message: scheduleResults.find((result) => result.reason)?.reason || 'No schedules found',
           search: {
             route_id: Number(route_id),
             pickup_stop_id: Number(pickup_stop_id),
             drop_stop_id: Number(drop_stop_id),
-            date: travel_date,
+            date: requestedTravelDate || null,
             passengers,
           },
           total: 0,
-          schedules: [],
+          schedules: dateKeyEnabled ? {} : [],
         });
       }
 
@@ -745,17 +784,18 @@ exports.getSchedules = async (req, res, next) => {
           route_id: Number(route_id),
           pickup_stop_id: Number(pickup_stop_id),
           drop_stop_id: Number(drop_stop_id),
-          date: travel_date,
+          date: requestedTravelDate || null,
           passengers,
         },
-        total: scheduleRes.schedules.length,
-        schedules: scheduleRes.schedules,
+        total: foundSchedules.length,
+        schedules: dateKeyEnabled
+          ? groupSchedulesByTripDate(foundSchedules)
+          : foundSchedules,
       });
     }
 
     const rawTravelDate = req.query?.date || req.body?.date || req.query?.travel_date || req.body?.travel_date;
     const bus_type_id = req.query?.bus_type_id || req.body?.bus_type_id;
-    const { Op } = require('sequelize');
 
     const where = {};
     if (route_id) where.route_id = route_id;
@@ -859,7 +899,9 @@ exports.getSchedules = async (req, res, next) => {
     res.json({
       status: true,
       message: 'Schedules retrieved successfully',
-      data: formattedSchedules,
+      data: dateKeyEnabled
+        ? groupSchedulesByTripDate(formattedSchedules)
+        : formattedSchedules,
     });
   } catch (err) {
     next(err);
