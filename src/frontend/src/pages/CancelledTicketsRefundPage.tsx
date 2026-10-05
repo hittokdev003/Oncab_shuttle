@@ -56,13 +56,17 @@ export const CancelledTicketsRefundPage: React.FC<CancelledTicketsRefundPageProp
                   <Td><div className="text-white text-sm">{b.passenger_name}</div><div className="text-slate-500 text-xs">{b.passenger_mobile}</div></Td>
                   <Td className="text-xs text-slate-300">{b.trip?.schedule_code || '—'}</Td>
                   <Td className="text-xs text-slate-400">{b.cancelled_at ? new Date(b.cancelled_at).toLocaleDateString() : b.updated_at ? new Date(b.updated_at).toLocaleDateString() : '—'}</Td>
-                  <Td className="text-sm font-semibold" style={{ color: '#f59e0b' }}>₹{b.final_amount}</Td>
+                  <Td className="text-sm font-semibold text-amber-400">
+                    {b.refunds?.length
+                      ? `₹${b.refunds.reduce((total: number, refund: any) => total + Number(refund.refund_amount || 0), 0).toFixed(2)}`
+                      : '—'}
+                  </Td>
                   <Td><StatusBadge status={b.payment_status} /></Td>
                   <Td>
                     {b.payment_status === 'paid' && b.refunds?.some((refund: any) => ['pending', 'failed'].includes(refund.status)) && (
                       <Button variant="secondary" size="sm" onClick={() => {
                         const refund = b.refunds.find((item: any) => ['pending', 'failed'].includes(item.status));
-                        if (refund) setRefundModal({ booking: b, refundId: refund.id });
+                        if (refund) setRefundModal({ booking: b, refund });
                       }}>
                         <RefreshCw size={12} /> Refund
                       </Button>
@@ -80,7 +84,7 @@ export const CancelledTicketsRefundPage: React.FC<CancelledTicketsRefundPageProp
         <div className="space-y-3">
           <div className="p-3 rounded-lg" style={{ background: 'rgba(99, 102, 241, 0.08)' }}>
             <p className="text-white text-sm font-medium">{refundModal?.booking?.booking_reference}</p>
-            <p className="text-slate-400 text-xs mt-0.5">Amount: ₹{refundModal?.booking?.final_amount}</p>
+            <p className="text-slate-400 text-xs mt-0.5">Amount: ₹{Number(refundModal?.refund?.refund_amount || 0).toFixed(2)}</p>
           </div>
           <Input label="Notes (optional)" value={refundNote} onChange={setRefundNote} placeholder="Refund notes..." />
         </div>
