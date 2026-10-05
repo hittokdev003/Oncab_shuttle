@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Oct 03, 2026 at 07:04 PM
+-- Generation Time: Oct 05, 2026 at 07:04 AM
 -- Server version: 8.0.43-0ubuntu0.22.04.2
 -- PHP Version: 8.1.7-1ubuntu3.5
 
@@ -30,16 +30,16 @@ SET time_zone = "+00:00";
 CREATE TABLE `admin_users` (
   `id` int UNSIGNED NOT NULL,
   `role_id` int UNSIGNED NOT NULL,
-  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `email` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `password` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `avatar` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `email` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `phone` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `avatar` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT '1',
   `last_login_at` datetime DEFAULT NULL,
-  `password_reset_token` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `password_reset_token` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `password_reset_expires` datetime DEFAULT NULL,
-  `refresh_token` text COLLATE utf8mb4_unicode_ci,
+  `refresh_token` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
@@ -50,7 +50,7 @@ CREATE TABLE `admin_users` (
 --
 
 INSERT INTO `admin_users` (`id`, `role_id`, `name`, `email`, `password`, `phone`, `avatar`, `is_active`, `last_login_at`, `password_reset_token`, `password_reset_expires`, `refresh_token`, `deleted_at`, `created_at`, `updated_at`) VALUES
-(1, 1, 'System Administrator', 'admin@oncabshuttle.com', '$2b$12$HswfqrOL8qn71Q99TWRE8.w/AY5oGqDFNFsNDVKgf7GhfIyMJfIFe', '+91 98765 00001', NULL, 1, '2026-10-03 17:09:38', NULL, NULL, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiaWF0IjoxNzkxMDQ5MTgxLCJleHAiOjE3OTE2NTM5ODF9.ntzgJtU0OPzkcSYP4dgPER_gYnlY0uH6GhVb28dksVQ', NULL, '2026-09-28 12:35:58', '2026-10-03 17:39:41'),
+(1, 1, 'System Administrator', 'admin@oncabshuttle.com', '$2b$12$HswfqrOL8qn71Q99TWRE8.w/AY5oGqDFNFsNDVKgf7GhfIyMJfIFe', '+91 98765 00001', NULL, 1, '2026-10-05 06:47:52', NULL, NULL, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiaWF0IjoxNzkxMTgzNzk4LCJleHAiOjE3OTE3ODg1OTh9.BhGHp64_LKUpyYYy_1B4p9su_OJT5KOkc3D3nGduJWI', NULL, '2026-09-28 12:35:58', '2026-10-05 07:03:18'),
 (2, 2, 'Fleet Dispatcher', 'operator@oncabshuttle.com', '$2b$12$v4q3sfRgHqRbM7pmOFTCie2NQ1wFbKMtgiLGuGYNDXywLzPXYOX7W', '+91 98765 00002', NULL, 1, '2026-09-30 11:54:44', NULL, NULL, NULL, NULL, '2026-09-28 12:35:58', '2026-09-30 11:54:53'),
 (3, 3, 'Accountant', 'accountant@oncabshuttle.com', '$2b$12$iEd0biBotnXZZT5BQ7X1vOQlO48iKzSJBLrlFDSEe7qloGGqnQFqS', '9876543210', NULL, 1, '2026-10-03 17:06:45', NULL, NULL, NULL, NULL, '2026-10-01 07:03:19', '2026-10-03 17:06:52'),
 (4, 5, 'Owner1', 'owner1@oncabshuttle.com', '$2b$12$gF2nP5dm29YS/XCcLQrejunKazBttSTklb9Ila0ubO.3AdAApbqjW', '', NULL, 1, '2026-10-03 17:07:35', NULL, NULL, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwiaWF0IjoxNzkxMDUzNDk3LCJleHAiOjE3OTE2NTgyOTd9._L0f73iOMM-wzX8ZE53OQzjecnx6a8MorRqdxpOymMw', NULL, '2026-10-01 08:00:43', '2026-10-03 18:51:37');
@@ -64,20 +64,20 @@ INSERT INTO `admin_users` (`id`, `role_id`, `name`, `email`, `password`, `phone`
 CREATE TABLE `audit_logs` (
   `id` int UNSIGNED NOT NULL,
   `user_id` int UNSIGNED DEFAULT NULL,
-  `user_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `user_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `action` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `module` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `entity_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `action` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `module` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `entity_type` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `entity_id` int UNSIGNED DEFAULT NULL,
   `old_values` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   `new_values` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
-  `ip_address` varchar(45) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `user_agent` text COLLATE utf8mb4_unicode_ci,
-  `description` text COLLATE utf8mb4_unicode_ci,
-  `status` enum('success','failed') COLLATE utf8mb4_unicode_ci DEFAULT 'success',
+  `ip_address` varchar(45) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_agent` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `status` enum('success','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'success',
   `created_at` datetime NOT NULL
-) ;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `audit_logs`
@@ -258,7 +258,17 @@ INSERT INTO `audit_logs` (`id`, `user_id`, `user_type`, `user_name`, `action`, `
 (172, 1, 'admin', 'System Administrator', 'login', 'auth', NULL, NULL, NULL, NULL, '223.181.50.160', NULL, 'User logged in', 'success', '2026-10-03 17:07:15'),
 (173, 1, 'admin', 'System Administrator', 'logout', 'auth', NULL, NULL, NULL, NULL, '223.181.50.160', NULL, 'User logged out', 'success', '2026-10-03 17:07:28'),
 (174, 4, 'Owner', 'Owner1', 'login', 'auth', NULL, NULL, NULL, NULL, '223.181.50.160', NULL, 'User logged in', 'success', '2026-10-03 17:07:35'),
-(175, 1, 'admin', 'System Administrator', 'login', 'auth', NULL, NULL, NULL, NULL, '223.181.50.160', NULL, 'User logged in', 'success', '2026-10-03 17:09:38');
+(175, 1, 'admin', 'System Administrator', 'login', 'auth', NULL, NULL, NULL, NULL, '223.181.50.160', NULL, 'User logged in', 'success', '2026-10-03 17:09:38'),
+(176, 1, 'admin', 'System Administrator', 'login', 'auth', NULL, NULL, NULL, NULL, '223.181.50.160', NULL, 'User logged in', 'success', '2026-10-03 20:27:21'),
+(177, 1, 'admin', 'System Administrator', 'create', 'trips', 'Trip', 11, NULL, '{\"schedule_code\":\"SCH-2026-8537\",\"trip_date\":\"2026-10-04\"}', '223.181.50.160', NULL, 'Created trip SCH-2026-8537', 'success', '2026-10-03 20:36:02'),
+(178, 1, 'admin', 'System Administrator', 'create', 'trips', 'Trip', 12, NULL, '{\"schedule_code\":\"SCH-2026-2017\",\"trip_date\":\"2026-10-05\"}', '223.181.50.160', NULL, 'Created trip SCH-2026-2017', 'success', '2026-10-03 20:43:02'),
+(179, 1, 'admin', 'System Administrator', 'create', 'trips', 'Trip', 13, NULL, '{\"schedule_code\":\"SCH-2026-2688\",\"trip_date\":\"2026-10-05\"}', '223.181.50.160', NULL, 'Created trip SCH-2026-2688', 'success', '2026-10-04 15:19:36'),
+(180, 1, 'admin', 'System Administrator', 'create', 'trips', 'Trip', 14, NULL, '{\"schedule_code\":\"SCH-2026-2723\",\"trip_date\":\"2026-10-06\"}', '223.181.50.160', NULL, 'Created trip SCH-2026-2723', 'success', '2026-10-04 15:21:09'),
+(181, 1, 'admin', 'System Administrator', 'create', 'trips', 'Trip', 15, NULL, '{\"schedule_code\":\"SCH-2026-7528\",\"trip_date\":\"2026-10-07\"}', '223.181.50.160', NULL, 'Created trip SCH-2026-7528', 'success', '2026-10-04 15:41:59'),
+(182, 1, 'admin', 'System Administrator', 'logout', 'auth', NULL, NULL, NULL, NULL, '223.181.50.160', NULL, 'User logged out', 'success', '2026-10-04 16:08:52'),
+(183, 1, 'admin', 'System Administrator', 'login', 'auth', NULL, NULL, NULL, NULL, '152.58.182.42', NULL, 'User logged in', 'success', '2026-10-04 16:26:30'),
+(184, 1, 'admin', 'System Administrator', 'login', 'auth', NULL, NULL, NULL, NULL, '223.181.50.160', NULL, 'User logged in', 'success', '2026-10-04 16:27:58'),
+(185, 1, 'admin', 'System Administrator', 'login', 'auth', NULL, NULL, NULL, NULL, '223.181.50.160', NULL, 'User logged in', 'success', '2026-10-05 06:47:52');
 
 -- --------------------------------------------------------
 
@@ -268,7 +278,7 @@ INSERT INTO `audit_logs` (`id`, `user_id`, `user_type`, `user_name`, `action`, `
 
 CREATE TABLE `bookings` (
   `id` int UNSIGNED NOT NULL,
-  `booking_reference` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `booking_reference` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `trip_id` int UNSIGNED NOT NULL,
   `passenger_id` int UNSIGNED DEFAULT NULL,
   `origin_stop_id` int UNSIGNED DEFAULT NULL,
@@ -277,32 +287,32 @@ CREATE TABLE `bookings` (
   `travel_date` date NOT NULL,
   `seat_numbers` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   `total_seats` int DEFAULT '1',
-  `passenger_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `passenger_mobile` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `passenger_email` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `passenger_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `passenger_mobile` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `passenger_email` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `total_fare` decimal(10,2) DEFAULT '0.00',
   `discount_amount` decimal(10,2) DEFAULT '0.00',
   `final_amount` decimal(10,2) DEFAULT '0.00',
-  `payment_status` enum('pending','paid','failed','refunded','partial_refund') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
-  `payment_method` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `transaction_id` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `booking_status` enum('confirmed','cancelled','completed','pending') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
-  `boarding_pass_code` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `boarding_pin` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `payment_status` enum('pending','paid','failed','refunded','partial_refund') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `payment_method` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `transaction_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `booking_status` enum('confirmed','cancelled','completed','pending') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `boarding_pass_code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `boarding_pin` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `boarding_time` time DEFAULT NULL,
   `boarded_at` datetime DEFAULT NULL,
-  `boarding_status` enum('not_boarded','boarded','no_show') COLLATE utf8mb4_unicode_ci DEFAULT 'not_boarded',
+  `boarding_status` enum('not_boarded','boarded','no_show') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'not_boarded',
   `dropped_at` datetime DEFAULT NULL,
-  `special_requests` text COLLATE utf8mb4_unicode_ci,
-  `qr_token` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `cancellation_reason` text COLLATE utf8mb4_unicode_ci,
+  `special_requests` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `qr_token` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cancellation_reason` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `cancelled_at` datetime DEFAULT NULL,
   `cancelled_by` int UNSIGNED DEFAULT NULL,
-  `status` enum('Active','Cancelled','Completed','Payment Failed') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `status` enum('Active','Cancelled','Completed','Payment Failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
-) ;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `bookings`
@@ -310,7 +320,27 @@ CREATE TABLE `bookings` (
 
 INSERT INTO `bookings` (`id`, `booking_reference`, `trip_id`, `passenger_id`, `origin_stop_id`, `destination_stop_id`, `coupon_id`, `travel_date`, `seat_numbers`, `total_seats`, `passenger_name`, `passenger_mobile`, `passenger_email`, `total_fare`, `discount_amount`, `final_amount`, `payment_status`, `payment_method`, `transaction_id`, `booking_status`, `boarding_pass_code`, `boarding_pin`, `boarding_time`, `boarded_at`, `boarding_status`, `dropped_at`, `special_requests`, `qr_token`, `cancellation_reason`, `cancelled_at`, `cancelled_by`, `status`, `deleted_at`, `created_at`, `updated_at`) VALUES
 (1, 'BK-1790858440577-655', 3, NULL, 1, 4, NULL, '2026-10-01', '[\"1A\",\"1B\"]', 2, 'Rahul Sharma', '9876543210', 'rahul@example.com', '0.00', '0.00', '0.00', 'pending', 'upi', NULL, 'cancelled', 'BP-2E882C', '7182', NULL, NULL, 'not_boarded', NULL, NULL, '8616b935-a313-4c24-9191-521f57b56fa0', 'Cancelled by admin', '2026-10-02 14:34:11', 1, 'Cancelled', NULL, '2026-10-01 12:40:40', '2026-10-02 14:34:11'),
-(2, 'BK-1791019846684-873', 3, NULL, 1, 2, NULL, '2026-10-03', '[\"1A\",\"1B\"]', 2, 'Rahul Sharma', '9876543210', 'rahul@example.com', '138.00', '0.00', '138.00', 'pending', 'upi', NULL, 'confirmed', 'BP-JQLLZV', '1709', NULL, NULL, 'not_boarded', NULL, NULL, '3387d5c1-60d6-43dc-98ac-3200b7c61831', NULL, NULL, NULL, 'Active', NULL, '2026-10-03 09:30:46', '2026-10-03 09:30:46');
+(2, 'BK-1791019846684-873', 3, NULL, 1, 2, NULL, '2026-10-03', '[\"1A\",\"1B\"]', 2, 'Rahul Sharma', '9876543210', 'rahul@example.com', '138.00', '0.00', '138.00', 'pending', 'upi', NULL, 'confirmed', 'BP-JQLLZV', '1709', NULL, NULL, 'not_boarded', NULL, NULL, '3387d5c1-60d6-43dc-98ac-3200b7c61831', NULL, NULL, NULL, 'Active', NULL, '2026-10-03 09:30:46', '2026-10-03 09:30:46'),
+(3, 'BK-1791061889759-963', 11, NULL, 31, 32, NULL, '2026-10-03', '[\"1A\",\"1B\"]', 2, 'Rahul Sharma', '9876543210', 'rahul@example.com', '398.00', '0.00', '398.00', 'pending', 'upi', NULL, 'confirmed', 'BP-7CFJA0', '3323', NULL, NULL, 'not_boarded', NULL, NULL, 'b24848f2-baa8-4d65-98b9-976b97009e85', NULL, NULL, NULL, 'Active', NULL, '2026-10-03 21:11:29', '2026-10-03 21:11:29'),
+(4, 'BK-1791066956213-203', 11, NULL, 31, 32, NULL, '2026-10-03', '[\"1A\",\"1B\"]', 2, 'Rahul Sharma', '9876543210', 'rahul@example.com', '398.00', '0.00', '398.00', 'pending', 'upi', NULL, 'confirmed', 'BP-UCNFUV', '1200', NULL, NULL, 'not_boarded', NULL, NULL, 'aa3714d1-2b7c-46d7-9088-6d5938087c7f', NULL, NULL, NULL, 'Active', NULL, '2026-10-03 22:35:56', '2026-10-03 22:35:56'),
+(5, 'BK-1791066962706-320', 11, NULL, 31, 32, NULL, '2026-10-03', '[\"1A\",\"1B\"]', 2, 'Rahul Sharma', '9876543210', 'rahul@example.com', '398.00', '0.00', '398.00', 'pending', 'upi', NULL, 'confirmed', 'BP-7SDX7E', '3613', NULL, NULL, 'not_boarded', NULL, NULL, 'b3acda4a-8846-4225-afc3-79cbb6d29c2b', NULL, NULL, NULL, 'Active', NULL, '2026-10-03 22:36:02', '2026-10-03 22:36:02'),
+(6, 'BK-1791067077735-784', 11, NULL, 31, 32, NULL, '2026-10-03', '[\"1A\",\"1B\"]', 2, 'Rahul Sharma', '9876543210', 'rahul@example.com', '398.00', '0.00', '398.00', 'pending', 'upi', NULL, 'confirmed', 'BP-RCSTS8', '9377', NULL, NULL, 'not_boarded', NULL, NULL, '62e89e7a-6e5d-4e0b-a69a-47530263ff8c', NULL, NULL, NULL, 'Active', NULL, '2026-10-03 22:37:57', '2026-10-03 22:37:57'),
+(8, 'BK-1791103576293-382', 3, NULL, 1, 2, NULL, '2026-10-03', '[\"1A\",\"1B\"]', 2, 'Rahul Sharma', '9876543210', 'rahul@example.com', '138.00', '0.00', '138.00', 'pending', 'upi', NULL, 'confirmed', 'BP-SMZTJS', '2543', NULL, NULL, 'not_boarded', NULL, NULL, 'ef35a7a2-9c81-4ca9-baba-2de7c8182cf5', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 08:46:16', '2026-10-04 08:46:16'),
+(10, 'BK-1791118133969-857', 12, NULL, 25, 34, NULL, '2026-10-05', '[\"1A\",\"1B\"]', 2, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '398.00', '0.00', '398.00', 'pending', 'payu', NULL, 'confirmed', 'BP-KR1GOC', '4739', NULL, NULL, 'not_boarded', NULL, NULL, '558145f6-bc13-4b68-849e-f94853b8ddee', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 12:48:53', '2026-10-04 12:48:53'),
+(11, 'BK-1791119657040-49', 11, NULL, 25, 34, NULL, '2026-10-04', '[\"6A\",\"6B\"]', 2, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '398.00', '0.00', '398.00', 'failed', 'payu', 'OC179111965719960692', 'confirmed', 'BP-T0IS1B', '9175', NULL, NULL, 'not_boarded', NULL, NULL, 'e67ca5a5-638e-4120-8752-5b54fa83d900', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 13:14:17', '2026-10-04 13:28:24'),
+(12, 'BK-1791120715065-222', 11, NULL, 25, 34, NULL, '2026-10-04', '[\"3D\",\"4D\"]', 2, 'Rudra Maity', '9002960021', 'tyrdra8+upd@gmail.com', '2.00', '0.00', '2.00', 'pending', 'payu', NULL, 'confirmed', 'BP-PNR3NI', '9546', NULL, NULL, 'not_boarded', NULL, NULL, '05743502-6715-42e2-8c13-c5996925bb25', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 13:31:55', '2026-10-04 13:31:55'),
+(13, 'BK-1791120745613-549', 11, NULL, 25, 34, NULL, '2026-10-04', '[\"1D\"]', 1, 'Rudra Maity', '9002960021', 'tyrdra8+upd@gmail.com', '1.00', '0.00', '1.00', 'pending', 'payu', NULL, 'confirmed', 'BP-PHPPQU', '5971', NULL, NULL, 'not_boarded', NULL, NULL, 'fbc192fe-da50-4c79-a8c5-cc973cb4c3c0', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 13:32:25', '2026-10-04 13:32:25'),
+(14, 'BK-1791120763146-899', 11, NULL, 25, 34, NULL, '2026-10-04', '[\"1D\"]', 1, 'Rudra Maity', '9002960021', 'tyrdra8+upd@gmail.com', '1.00', '0.00', '1.00', 'pending', 'payu', NULL, 'confirmed', 'BP-6L37XN', '9475', NULL, NULL, 'not_boarded', NULL, NULL, '2b3e9b49-5f11-4697-9f87-165f9ed22460', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 13:32:43', '2026-10-04 13:32:43'),
+(15, 'BK-1791121056798-589', 11, NULL, 25, 34, NULL, '2026-10-04', '[\"6C\",\"7C\"]', 2, 'Rudra Maity', '9002960021', 'tyrdra8+upd@gmail.com', '2.00', '0.00', '2.00', 'pending', 'wallet', NULL, 'confirmed', 'BP-80M3R3', '9314', NULL, NULL, 'not_boarded', NULL, NULL, 'd708ea76-49bc-4771-b9b2-cfa9250c00d4', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 13:37:36', '2026-10-04 13:37:36'),
+(16, 'BK-1791121081174-63', 11, NULL, 25, 34, NULL, '2026-10-04', '[\"6C\"]', 1, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '1.00', '0.00', '1.00', 'pending', 'payu', NULL, 'confirmed', 'BP-OLTPJP', '2277', NULL, NULL, 'not_boarded', NULL, NULL, 'b7f4b515-031a-4e2f-83a8-4e77565fe22f', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 13:38:01', '2026-10-04 13:38:01'),
+(17, 'BK-1791121232282-690', 11, NULL, 25, 34, NULL, '2026-10-04', '[\"1A\"]', 1, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '1.00', '0.00', '1.00', 'pending', 'payu', NULL, 'confirmed', 'BP-2DGXAA', '3336', NULL, NULL, 'not_boarded', NULL, NULL, 'c757337c-d94e-4687-88d2-c1a19c7b69df', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 13:40:32', '2026-10-04 13:40:32'),
+(18, 'BK-1791121616358-110', 12, NULL, 25, 34, NULL, '2026-10-05', '[\"1A\"]', 1, 'Rudra Maity', '9002960021', 'tyrdra8+upd@gmail.com', '1.00', '0.00', '1.00', 'pending', 'payu', NULL, 'confirmed', 'BP-81L62Q', '2535', NULL, NULL, 'not_boarded', NULL, NULL, '9098d615-af3e-4d6b-83c1-bba84bf28bc8', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 13:46:56', '2026-10-04 13:46:56'),
+(19, 'BK-1791124623405-424', 12, NULL, 25, 32, NULL, '2026-10-08', '[\"3D\"]', 1, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '1.00', '0.00', '1.00', 'pending', 'payu', NULL, 'confirmed', 'BP-11TI57', '3163', NULL, NULL, 'not_boarded', NULL, NULL, '13fca42e-88df-4a7d-9306-bb900264fb0b', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 14:37:03', '2026-10-04 14:37:03'),
+(20, 'BK-1791129449995-616', 12, NULL, 25, 32, NULL, '2026-10-07', '[\"1A\"]', 1, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '1.00', '0.00', '1.00', 'pending', 'payu', NULL, 'confirmed', 'BP-G0K3X7', '1976', NULL, NULL, 'not_boarded', NULL, NULL, '7a48b97f-4056-4634-a715-c39accc40a3e', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 15:57:29', '2026-10-04 15:57:29'),
+(21, 'BK-1791130025901-192', 14, NULL, 25, 32, NULL, '2026-10-04', '[\"1A\"]', 1, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '1.00', '0.00', '1.00', 'failed', 'payu', 'OC179113002607988803', 'confirmed', 'BP-2M6C9J', '8716', NULL, NULL, 'not_boarded', NULL, NULL, '4ddae694-0265-4b43-8001-114de5588057', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 16:07:05', '2026-10-04 16:15:15'),
+(22, 'BK-1791130522641-477', 14, NULL, 25, 32, NULL, '2026-10-04', '[\"1A\"]', 1, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '1.00', '0.00', '1.00', 'pending', 'payu', NULL, 'confirmed', 'BP-I61QRK', '7717', NULL, NULL, 'not_boarded', NULL, NULL, '4b2a78b1-ad55-41fb-b831-1548ff7a4d24', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 16:15:22', '2026-10-04 16:15:22'),
+(23, 'BK-1791130689339-312', 14, NULL, 25, 32, NULL, '2026-10-04', '[\"6C\"]', 1, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '1.00', '0.00', '1.00', 'failed', 'payu', 'OC179113068951007399', 'confirmed', 'BP-85U1BH', '8615', NULL, NULL, 'not_boarded', NULL, NULL, '9b039cf9-fc90-44b9-af9c-60a98035af15', NULL, NULL, NULL, 'Active', NULL, '2026-10-04 16:18:09', '2026-10-04 16:18:38'),
+(24, 'BK-1791130722048-543', 14, NULL, 25, 32, NULL, '2026-10-04', '[\"6C\"]', 1, 'sourav das', '9073806211', 'souravdas+upd@gmail.com', '1.00', '0.00', '1.00', 'paid', 'payu', 'OC179113072215020825', 'cancelled', 'BP-7RR45S', '8960', NULL, NULL, 'not_boarded', NULL, NULL, '7a1bdce4-b4be-4fc8-b9c5-823385d159fd', 'Cancelled by admin', '2026-10-05 06:49:44', 1, 'Cancelled', NULL, '2026-10-04 16:18:42', '2026-10-05 06:49:44');
 
 -- --------------------------------------------------------
 
@@ -341,15 +371,15 @@ CREATE TABLE `bus_driver_assignments` (
 
 CREATE TABLE `bus_routes` (
   `id` bigint UNSIGNED NOT NULL,
-  `route_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `route_code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `origin_city` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `destination_city` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `route_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `route_code` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `origin_city` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `destination_city` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `route_stops` json DEFAULT NULL,
   `total_distance` decimal(10,2) NOT NULL DEFAULT '0.00',
   `estimated_duration` int NOT NULL DEFAULT '0',
-  `status` enum('Active','Inactive') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
-  `description` text COLLATE utf8mb4_unicode_ci,
+  `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -364,14 +394,14 @@ CREATE TABLE `bus_schedules` (
   `id` bigint UNSIGNED NOT NULL,
   `route_id` bigint UNSIGNED NOT NULL,
   `bus_type_id` int UNSIGNED NOT NULL,
-  `schedule_code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `bus_number` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `schedule_code` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `bus_number` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `departure_time` time NOT NULL,
   `arrival_time` time NOT NULL,
-  `operating_days` set('monday','tuesday','wednesday','thursday','friday','saturday','sunday') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `operating_days` set('monday','tuesday','wednesday','thursday','friday','saturday','sunday') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `base_fare` decimal(10,2) NOT NULL,
   `fare_per_km` decimal(10,2) NOT NULL,
-  `status` enum('Active','Inactive','Cancelled') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `status` enum('Active','Inactive','Cancelled') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `valid_from` date DEFAULT NULL,
   `valid_until` date DEFAULT NULL,
   `driver_id` int UNSIGNED DEFAULT NULL,
@@ -394,14 +424,14 @@ CREATE TABLE `bus_schedules` (
 CREATE TABLE `bus_stops` (
   `id` bigint UNSIGNED NOT NULL,
   `route_id` bigint UNSIGNED NOT NULL,
-  `stop_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `stop_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `latitude` decimal(10,8) NOT NULL DEFAULT '0.00000000',
   `longitude` decimal(11,8) NOT NULL DEFAULT '0.00000000',
   `stop_sequence` int NOT NULL,
-  `stop_code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `address` text COLLATE utf8mb4_unicode_ci,
-  `landmark` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `status` enum('Active','Inactive') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `stop_code` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `address` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `landmark` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -414,30 +444,30 @@ CREATE TABLE `bus_stops` (
 
 CREATE TABLE `bus_types` (
   `id` int UNSIGNED NOT NULL,
-  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `code` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `total_seats` int DEFAULT '0',
   `seat_rows` int DEFAULT '0',
   `seat_columns` int DEFAULT '0',
-  `seat_type` enum('seater','sleeper','semi-sleeper') COLLATE utf8mb4_unicode_ci DEFAULT 'seater',
+  `seat_type` enum('seater','sleeper','semi-sleeper') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'seater',
   `has_ac` tinyint(1) DEFAULT '0',
   `has_wifi` tinyint(1) DEFAULT '0',
   `amenities` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
-  `description` text COLLATE utf8mb4_unicode_ci,
-  `image` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `status` enum('Active','Inactive') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `image` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
-) ;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `bus_types`
 --
 
 INSERT INTO `bus_types` (`id`, `name`, `code`, `total_seats`, `seat_rows`, `seat_columns`, `seat_type`, `has_ac`, `has_wifi`, `amenities`, `description`, `image`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'Mini Shuttle 14-Seater', 'MINI-14', 14, 7, 2, 'seater', 1, 0, NULL, 'Comfortable air-conditioned commuter van', NULL, 'Active', '2026-09-28 12:36:24', '2026-09-28 12:36:24'),
-(2, 'Standard Coach 24-Seater', 'STD-24', 24, 6, 4, 'seater', 1, 0, NULL, 'Medium capacity executive shuttle', NULL, 'Active', '2026-09-28 12:36:24', '2026-09-28 12:36:24'),
-(3, 'Deluxe Bus 40-Seater', 'DLX-40', 40, 10, 4, 'seater', 1, 0, NULL, 'Full size intercity deluxe coach', NULL, 'Active', '2026-09-28 12:36:24', '2026-09-28 12:36:24');
+(1, 'Mini Shuttle 14-Seater', 'MINI-14', 14, 7, 2, 'seater', 1, 0, 'AC, Comfortable Seats, USB Charging', 'Comfortable air-conditioned commuter van', NULL, 'Active', '2026-09-28 12:36:24', '2026-10-03 20:22:38'),
+(2, 'Standard Coach 24-Seater', 'STD-24', 24, 6, 4, 'seater', 1, 0, 'AC, Comfortable Seats, USB Charging', 'Medium capacity executive shuttle', NULL, 'Active', '2026-09-28 12:36:24', '2026-10-03 20:22:38'),
+(3, 'Deluxe Bus 40-Seater', 'DLX-40', 40, 10, 4, 'seater', 1, 0, 'AC, Comfortable Seats, USB Charging', 'Full size intercity deluxe coach', NULL, 'Active', '2026-09-28 12:36:24', '2026-10-03 20:22:38');
 
 -- --------------------------------------------------------
 
@@ -448,8 +478,8 @@ INSERT INTO `bus_types` (`id`, `name`, `code`, `total_seats`, `seat_rows`, `seat
 CREATE TABLE `coupons` (
   `id` int UNSIGNED NOT NULL,
   `created_by` int UNSIGNED DEFAULT NULL,
-  `code` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `code_type` enum('FLAT','PERCENTAGE') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `code` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `code_type` enum('FLAT','PERCENTAGE') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `amount` decimal(10,2) NOT NULL,
   `min_amount` decimal(10,2) DEFAULT '0.00',
   `max_discount` decimal(10,2) DEFAULT NULL,
@@ -458,10 +488,10 @@ CREATE TABLE `coupons` (
   `usage_limit` int DEFAULT NULL,
   `used_count` int DEFAULT '0',
   `per_user_limit` int DEFAULT '1',
-  `description` text COLLATE utf8mb4_unicode_ci,
-  `applicable_to` enum('All','Route','Pass') COLLATE utf8mb4_unicode_ci DEFAULT 'All',
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `applicable_to` enum('All','Route','Pass') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'All',
   `route_id` int UNSIGNED DEFAULT NULL,
-  `status` enum('Active','Inactive','Expired') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `status` enum('Active','Inactive','Expired') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
@@ -482,22 +512,22 @@ CREATE TABLE `drivers` (
   `vehicle_type_id` int UNSIGNED DEFAULT NULL,
   `is_bus_driver` tinyint(1) NOT NULL DEFAULT '0',
   `preferred_bus_type_id` int UNSIGNED DEFAULT NULL,
-  `driver_user_id` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `email` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `mobile` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `aadhar` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `pan` varchar(15) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `address` text COLLATE utf8mb4_unicode_ci,
-  `sex` enum('Male','Female','Other') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `driver_user_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `email` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `mobile` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `aadhar` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pan` varchar(15) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `address` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `sex` enum('Male','Female','Other') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `device_id` varchar(720) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `photo` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `referral` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `created_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `block_status` enum('Block','Unblock') COLLATE utf8mb4_unicode_ci DEFAULT 'Unblock',
-  `complete_status` enum('Complete','Incomplete') COLLATE utf8mb4_unicode_ci DEFAULT 'Incomplete',
-  `online_status` enum('Online','Offline') COLLATE utf8mb4_unicode_ci DEFAULT 'Offline',
-  `status` enum('Approve','Disapprove','Reject','Pending') COLLATE utf8mb4_unicode_ci DEFAULT 'Pending',
+  `photo` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `referral` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_by` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `block_status` enum('Block','Unblock') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Unblock',
+  `complete_status` enum('Complete','Incomplete') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Incomplete',
+  `online_status` enum('Online','Offline') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Offline',
+  `status` enum('Approve','Disapprove','Reject','Pending') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Pending',
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
@@ -509,7 +539,7 @@ CREATE TABLE `drivers` (
 
 INSERT INTO `drivers` (`id`, `owner_id`, `city_id`, `zone_id`, `driver_type_id`, `vehicle_type_id`, `is_bus_driver`, `preferred_bus_type_id`, `driver_user_id`, `name`, `email`, `mobile`, `aadhar`, `pan`, `address`, `sex`, `device_id`, `photo`, `referral`, `created_by`, `block_status`, `complete_status`, `online_status`, `status`, `deleted_at`, `created_at`, `updated_at`) VALUES
 (1, NULL, NULL, NULL, NULL, NULL, 1, 1, NULL, 'Bus Driver', 'driver@gmail.com', '9874589658', '789456987412', 'ABCVF3465D', 'HIIvb nvbnjh', 'Male', 'diT0qaPRR7CtqgxcPWjwV4:APA91bEe1o3D904OI5XDx5CN9xckuzh5XYdGasW65CpHtZKDQqlArBSKQ0xqRqSa75Ve56nRvyfLuRrMSxqclFbKe3FFzPHhrNkXoiifbe_psicgYZBDsY8', NULL, NULL, 'System Administrator', 'Unblock', 'Complete', 'Online', 'Approve', NULL, '2026-09-28 12:45:49', '2026-10-02 08:57:49'),
-(2, NULL, NULL, NULL, NULL, NULL, 1, 1, NULL, 'fghfgh', 'hittokdevandroid005@gmail.com', '7029725978', '515677663779', 'ANCD2332', 'fxccvxcvxcv', 'Male', 'bus_android_device', NULL, NULL, 'System Administrator', 'Unblock', 'Complete', 'Online', 'Approve', NULL, '2026-09-30 13:18:36', '2026-10-03 09:20:37'),
+(2, NULL, NULL, NULL, NULL, NULL, 1, 1, NULL, 'fghfgh', 'hittokdevandroid005@gmail.com', '7029725978', '515677663779', 'ANCD2332', 'fxccvxcvxcv', 'Male', 'device_unique_id_123', NULL, NULL, 'System Administrator', 'Unblock', 'Complete', 'Online', 'Approve', NULL, '2026-09-30 13:18:36', '2026-10-05 05:23:42'),
 (3, 4, NULL, NULL, NULL, 6, 1, 2, NULL, 'Rudra', '', '7029725978', '515677663777', 'ABCD546', '', 'Male', NULL, NULL, NULL, 'System Administrator', 'Unblock', 'Incomplete', 'Offline', 'Approve', NULL, '2026-10-02 14:32:18', '2026-10-03 15:26:46');
 
 -- --------------------------------------------------------
@@ -527,24 +557,24 @@ CREATE TABLE `driver_details` (
   `location_speed_kmh` decimal(7,2) DEFAULT NULL,
   `location_heading` decimal(6,2) DEFAULT NULL,
   `location_trip_id` int UNSIGNED DEFAULT NULL,
-  `aadhar` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `aadhar_img` mediumtext COLLATE utf8mb4_unicode_ci,
-  `aadhar_back_img` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `driving_licence` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `driving_licence_img` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `driving_licence_back_img` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `aadhar` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `aadhar_img` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `aadhar_back_img` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `driving_licence` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `driving_licence_img` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `driving_licence_back_img` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `licence_expiry_date` date DEFAULT NULL,
-  `driver_authorized_letter_img` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `smart_card_number` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `smart_card_img` mediumtext COLLATE utf8mb4_unicode_ci,
-  `smart_card_back_img` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `emergency_contact_number` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `father_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `mother_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `blood_group` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `alternate_mobile` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `availability_status` enum('Yes','No') COLLATE utf8mb4_unicode_ci DEFAULT 'Yes',
-  `status` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `driver_authorized_letter_img` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smart_card_number` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smart_card_img` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `smart_card_back_img` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `emergency_contact_number` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `father_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `mother_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `blood_group` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `alternate_mobile` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `availability_status` enum('Yes','No') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Yes',
+  `status` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -566,20 +596,20 @@ INSERT INTO `driver_details` (`id`, `driver_id`, `birth_day`, `latitude`, `longi
 
 CREATE TABLE `notifications` (
   `id` int UNSIGNED NOT NULL,
-  `type` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `notifiable_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `type` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `notifiable_type` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `notifiable_id` int UNSIGNED DEFAULT NULL,
-  `title` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `message` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `title` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
-  `target_type` enum('all','admin','operator','passenger','driver') COLLATE utf8mb4_unicode_ci DEFAULT 'all',
+  `target_type` enum('all','admin','operator','passenger','driver') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'all',
   `target_id` int UNSIGNED DEFAULT NULL,
   `read_at` datetime DEFAULT NULL,
   `sent_at` datetime DEFAULT NULL,
-  `channel` enum('in_app','email','sms','push') COLLATE utf8mb4_unicode_ci DEFAULT 'in_app',
+  `channel` enum('in_app','email','sms','push') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'in_app',
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
-) ;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `notifications`
@@ -597,17 +627,17 @@ INSERT INTO `notifications` (`id`, `type`, `notifiable_type`, `notifiable_id`, `
 
 CREATE TABLE `passengers` (
   `id` int UNSIGNED NOT NULL,
-  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `email` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `mobile` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `aadhar` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `address` text COLLATE utf8mb4_unicode_ci,
-  `city` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `sex` enum('Male','Female','Other') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `email` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `mobile` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `aadhar` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `address` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `city` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `sex` enum('Male','Female','Other') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `date_of_birth` date DEFAULT NULL,
-  `photo` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `block_status` enum('Block','Unblock') COLLATE utf8mb4_unicode_ci DEFAULT 'Unblock',
-  `status` enum('Active','Inactive') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `photo` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `block_status` enum('Block','Unblock') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Unblock',
+  `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `total_bookings` int DEFAULT '0',
   `total_spent` decimal(12,2) DEFAULT '0.00',
   `deleted_at` datetime DEFAULT NULL,
@@ -625,17 +655,17 @@ CREATE TABLE `passes` (
   `id` int UNSIGNED NOT NULL,
   `passenger_id` int UNSIGNED NOT NULL,
   `route_id` int UNSIGNED DEFAULT NULL,
-  `pass_code` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `pass_type` enum('daily','weekly','monthly','quarterly','annual') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `pass_code` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `pass_type` enum('daily','weekly','monthly','quarterly','annual') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `price` decimal(10,2) NOT NULL,
   `valid_from` date NOT NULL,
   `valid_until` date NOT NULL,
   `trips_allowed` int DEFAULT NULL,
   `trips_used` int DEFAULT '0',
-  `payment_status` enum('pending','paid','failed','refunded') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
-  `transaction_id` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `status` enum('Active','Expired','Suspended','Cancelled') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
-  `notes` text COLLATE utf8mb4_unicode_ci,
+  `payment_status` enum('pending','paid','failed','refunded') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `transaction_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('Active','Expired','Suspended','Cancelled') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
@@ -651,22 +681,22 @@ CREATE TABLE `payments` (
   `id` int UNSIGNED NOT NULL,
   `booking_id` int UNSIGNED DEFAULT NULL,
   `passenger_id` int UNSIGNED DEFAULT NULL,
-  `razorpay_payment_id` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `razorpay_order_id` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `razorpay_signature` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `payment_gateway` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `payu_txnid` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `payu_mihpayid` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `razorpay_payment_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `razorpay_order_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `razorpay_signature` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `payment_gateway` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `payu_txnid` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `payu_mihpayid` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `amount` decimal(10,2) NOT NULL,
-  `currency` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT 'INR',
-  `payment_method` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `status` enum('pending','captured','failed','refunded','partial_refund') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
-  `event` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `currency` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'INR',
+  `payment_method` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('pending','captured','failed','refunded','partial_refund') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `event` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `payload` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   `gateway_response` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
-) ;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `payments`
@@ -676,7 +706,27 @@ INSERT INTO `payments` (`id`, `booking_id`, `passenger_id`, `razorpay_payment_id
 (1, 2, NULL, NULL, NULL, NULL, 'payu', 'OC179102281826105373', NULL, '138.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791019846684-873\"}', NULL, '2026-10-03 10:20:18', '2026-10-03 10:20:18'),
 (2, 2, NULL, NULL, NULL, NULL, 'payu', 'OC179102326632300408', NULL, '138.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791019846684-873\"}', NULL, '2026-10-03 10:27:46', '2026-10-03 10:27:46'),
 (3, 2, NULL, NULL, NULL, NULL, 'payu', 'OC179102370857607036', NULL, '138.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791019846684-873\"}', NULL, '2026-10-03 10:35:08', '2026-10-03 10:35:08'),
-(4, 2, NULL, NULL, NULL, NULL, 'payu', 'OC179103038821592323', NULL, '138.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791019846684-873\"}', NULL, '2026-10-03 12:26:28', '2026-10-03 12:26:28');
+(4, 2, NULL, NULL, NULL, NULL, 'payu', 'OC179103038821592323', NULL, '138.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791019846684-873\"}', NULL, '2026-10-03 12:26:28', '2026-10-03 12:26:28'),
+(5, 3, NULL, NULL, NULL, NULL, 'payu', 'OC179106223033984948', NULL, '398.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791061889759-963\"}', NULL, '2026-10-03 21:17:10', '2026-10-03 21:17:10'),
+(6, 2, NULL, NULL, NULL, NULL, 'payu', 'OC179111774763323707', NULL, '138.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791019846684-873\"}', NULL, '2026-10-04 12:42:27', '2026-10-04 12:42:27'),
+(7, 10, NULL, NULL, NULL, NULL, 'payu', 'OC179111813411511019', NULL, '398.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791118133969-857\"}', NULL, '2026-10-04 12:48:54', '2026-10-04 12:48:54'),
+(8, 2, NULL, NULL, NULL, NULL, 'payu', 'OC179111883885207489', NULL, '138.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791019846684-873\"}', NULL, '2026-10-04 13:00:38', '2026-10-04 13:00:38'),
+(9, 2, NULL, NULL, NULL, NULL, 'payu', 'OC179111894261719471', NULL, '138.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791019846684-873\"}', NULL, '2026-10-04 13:02:22', '2026-10-04 13:02:22'),
+(10, 11, NULL, NULL, NULL, NULL, 'payu', 'OC179111965719960692', '31092983221', '398.00', 'INR', 'payu', 'failed', 'payment_failed', '{\"0\":\"{\",\"1\":\"\\\"\",\"2\":\"b\",\"3\":\"o\",\"4\":\"o\",\"5\":\"k\",\"6\":\"i\",\"7\":\"n\",\"8\":\"g\",\"9\":\"_\",\"10\":\"r\",\"11\":\"e\",\"12\":\"f\",\"13\":\"e\",\"14\":\"r\",\"15\":\"e\",\"16\":\"n\",\"17\":\"c\",\"18\":\"e\",\"19\":\"\\\"\",\"20\":\":\",\"21\":\"\\\"\",\"22\":\"B\",\"23\":\"K\",\"24\":\"-\",\"25\":\"1\",\"26\":\"7\",\"27\":\"9\",\"28\":\"1\",\"29\":\"1\",\"30\":\"1\",\"31\":\"9\",\"32\":\"6\",\"33\":\"5\",\"34\":\"7\",\"35\":\"0\",\"36\":\"4\",\"37\":\"0\",\"38\":\"-\",\"39\":\"4\",\"40\":\"9\",\"41\":\"\\\"\",\"42\":\"}\",\"payu_status\":\"failure\"}', '{\"mihpayid\":\"31092983221\",\"mode\":\"\",\"status\":\"failure\",\"unmappedstatus\":\"userCancelled\",\"key\":\"hDKAHq\",\"txnid\":\"OC179111965719960692\",\"amount\":\"398.00\",\"discount\":\"0.00\",\"net_amount_debit\":\"0.00\",\"addedon\":\"2026-10-04 18:44:18\",\"productinfo\":\"Booking BK-1791119657040-49\",\"firstname\":\"sourav das\",\"lastname\":\"\",\"address1\":\"\",\"address2\":\"\",\"city\":\"\",\"state\":\"\",\"country\":\"\",\"zipcode\":\"\",\"email\":\"souravdas+upd@gmail.com\",\"phone\":\"9073806211\",\"udf1\":\"11\",\"udf2\":\"\",\"udf3\":\"\",\"udf4\":\"\",\"udf5\":\"\",\"udf6\":\"\",\"udf7\":\"\",\"udf8\":\"\",\"udf9\":\"\",\"udf10\":\"\",\"hash\":\"12f2eda6bcd2366b2e4036fa0833491b15e011113aa04e408c8004b101e49255d074e6f2e46e6a5bcf30e43ae1a6ffa8465994e5c0df571379cb4cf3c9354038\",\"field1\":\"\",\"field2\":\"\",\"field3\":\"\",\"field4\":\"\",\"field5\":\"\",\"field6\":\"\",\"field7\":\"\",\"field8\":\"\",\"field9\":\"Cancelled by user\",\"payment_source\":\"payu\",\"PG_TYPE\":\"\",\"bank_ref_num\":\"\",\"bankcode\":\"\",\"error\":\"E1605\",\"error_Message\":\"Transaction failed due to customer pressing cancel button.\"}', '2026-10-04 13:14:17', '2026-10-04 13:28:24'),
+(11, 12, NULL, NULL, NULL, NULL, 'payu', 'OC179112071518823056', NULL, '2.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791120715065-222\"}', NULL, '2026-10-04 13:31:55', '2026-10-04 13:31:55'),
+(12, 13, NULL, NULL, NULL, NULL, 'payu', 'OC179112074573532302', NULL, '1.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791120745613-549\"}', NULL, '2026-10-04 13:32:25', '2026-10-04 13:32:25'),
+(13, 14, NULL, NULL, NULL, NULL, 'payu', 'OC179112076324909981', NULL, '1.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791120763146-899\"}', NULL, '2026-10-04 13:32:43', '2026-10-04 13:32:43'),
+(14, 15, NULL, NULL, NULL, NULL, 'payu', 'OC179112105691202431', NULL, '2.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791121056798-589\"}', NULL, '2026-10-04 13:37:36', '2026-10-04 13:37:36'),
+(15, 16, NULL, NULL, NULL, NULL, 'payu', 'OC179112108131529062', NULL, '1.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791121081174-63\"}', NULL, '2026-10-04 13:38:01', '2026-10-04 13:38:01'),
+(16, 17, NULL, NULL, NULL, NULL, 'payu', 'OC179112123241497263', NULL, '1.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791121232282-690\"}', NULL, '2026-10-04 13:40:32', '2026-10-04 13:40:32'),
+(17, 18, NULL, NULL, NULL, NULL, 'payu', 'OC179112161647815747', NULL, '1.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791121616358-110\"}', NULL, '2026-10-04 13:46:56', '2026-10-04 13:46:56'),
+(18, 19, NULL, NULL, NULL, NULL, 'payu', 'OC179112462360176120', NULL, '1.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791124623405-424\"}', NULL, '2026-10-04 14:37:03', '2026-10-04 14:37:03'),
+(19, 20, NULL, NULL, NULL, NULL, 'payu', 'OC179112945019319458', NULL, '1.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791129449995-616\"}', NULL, '2026-10-04 15:57:30', '2026-10-04 15:57:30'),
+(20, 2, NULL, NULL, NULL, NULL, 'payu', 'OC179112979440318722', NULL, '138.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791019846684-873\"}', NULL, '2026-10-04 16:03:14', '2026-10-04 16:03:14'),
+(21, 21, NULL, NULL, NULL, NULL, 'payu', 'OC179113002607988803', '31096896665', '1.00', 'INR', 'UPI', 'failed', 'payment_failed', '{\"0\":\"{\",\"1\":\"\\\"\",\"2\":\"b\",\"3\":\"o\",\"4\":\"o\",\"5\":\"k\",\"6\":\"i\",\"7\":\"n\",\"8\":\"g\",\"9\":\"_\",\"10\":\"r\",\"11\":\"e\",\"12\":\"f\",\"13\":\"e\",\"14\":\"r\",\"15\":\"e\",\"16\":\"n\",\"17\":\"c\",\"18\":\"e\",\"19\":\"\\\"\",\"20\":\":\",\"21\":\"\\\"\",\"22\":\"B\",\"23\":\"K\",\"24\":\"-\",\"25\":\"1\",\"26\":\"7\",\"27\":\"9\",\"28\":\"1\",\"29\":\"1\",\"30\":\"3\",\"31\":\"0\",\"32\":\"0\",\"33\":\"2\",\"34\":\"5\",\"35\":\"9\",\"36\":\"0\",\"37\":\"1\",\"38\":\"-\",\"39\":\"1\",\"40\":\"9\",\"41\":\"2\",\"42\":\"\\\"\",\"43\":\"}\",\"payu_status\":\"pending\"}', '{\"mihpayid\":\"31096896665\",\"mode\":\"UPI\",\"status\":\"pending\",\"unmappedstatus\":\"in progress\",\"key\":\"hDKAHq\",\"txnid\":\"OC179113002607988803\",\"amount\":\"1.00\",\"discount\":\"0.00\",\"net_amount_debit\":\"0.00\",\"addedon\":\"2026-10-04 21:40:26\",\"productinfo\":\"Booking BK-1791130025901-192\",\"firstname\":\"sourav das\",\"lastname\":\"\",\"address1\":\"\",\"address2\":\"\",\"city\":\"\",\"state\":\"\",\"country\":\"\",\"zipcode\":\"\",\"email\":\"souravdas+upd@gmail.com\",\"phone\":\"9073806211\",\"udf1\":\"21\",\"udf2\":\"\",\"udf3\":\"\",\"udf4\":\"\",\"udf5\":\"\",\"udf6\":\"\",\"udf7\":\"\",\"udf8\":\"\",\"udf9\":\"\",\"udf10\":\"\",\"hash\":\"2f09f7cd2e3ac99122c2ad70df72004e2e2766414c8c4e7235810442218404c014b3987295029003530b06961d680be4eef90cabe539dac4c4aa7b7aab070e6e\",\"field1\":\"\",\"field2\":\"\",\"field3\":\"\",\"field4\":\"\",\"field5\":\"\",\"field6\":\"\",\"field7\":\"\",\"field8\":\"genericintent\",\"field9\":\"\",\"payment_source\":\"payu\",\"meCode\":\"{\\\"pgMerchantId\\\":\\\"INDB000011216344\\\",\\\"encKey\\\":\\\"02be3a84b9fa9a23c49117e463f6ddfd92e19b7d71a1ead6e101417ca54420fd7248fd48195e70d01e6326fa82060919\\\",\\\"merchantVpa\\\":\\\"HITTOKPRIVATELIMITED-13210293.payu@indus\\\"}\",\"PG_TYPE\":\"UPI-PG\",\"bank_ref_num\":\"\",\"bankcode\":\"INTENT\",\"error\":\"E1206\",\"error_Message\":\"Transaction interrupted by pressing back button\"}', '2026-10-04 16:07:06', '2026-10-04 16:15:15'),
+(22, 22, NULL, NULL, NULL, NULL, 'payu', 'OC179113052305625517', NULL, '1.00', 'INR', 'payu', 'pending', 'checkout_initiated', '{\"booking_reference\":\"BK-1791130522641-477\"}', NULL, '2026-10-04 16:15:23', '2026-10-04 16:15:23'),
+(23, 23, NULL, NULL, NULL, NULL, 'payu', 'OC179113068951007399', '31097044665', '1.00', 'INR', 'UPI', 'failed', 'payment_failed', '{\"0\":\"{\",\"1\":\"\\\"\",\"2\":\"b\",\"3\":\"o\",\"4\":\"o\",\"5\":\"k\",\"6\":\"i\",\"7\":\"n\",\"8\":\"g\",\"9\":\"_\",\"10\":\"r\",\"11\":\"e\",\"12\":\"f\",\"13\":\"e\",\"14\":\"r\",\"15\":\"e\",\"16\":\"n\",\"17\":\"c\",\"18\":\"e\",\"19\":\"\\\"\",\"20\":\":\",\"21\":\"\\\"\",\"22\":\"B\",\"23\":\"K\",\"24\":\"-\",\"25\":\"1\",\"26\":\"7\",\"27\":\"9\",\"28\":\"1\",\"29\":\"1\",\"30\":\"3\",\"31\":\"0\",\"32\":\"6\",\"33\":\"8\",\"34\":\"9\",\"35\":\"3\",\"36\":\"3\",\"37\":\"9\",\"38\":\"-\",\"39\":\"3\",\"40\":\"1\",\"41\":\"2\",\"42\":\"\\\"\",\"43\":\"}\",\"payu_status\":\"pending\"}', '{\"mihpayid\":\"31097044665\",\"mode\":\"UPI\",\"status\":\"pending\",\"unmappedstatus\":\"in progress\",\"key\":\"hDKAHq\",\"txnid\":\"OC179113068951007399\",\"amount\":\"1.00\",\"discount\":\"0.00\",\"net_amount_debit\":\"0.00\",\"addedon\":\"2026-10-04 21:48:30\",\"productinfo\":\"Booking BK-1791130689339-312\",\"firstname\":\"sourav das\",\"lastname\":\"\",\"address1\":\"\",\"address2\":\"\",\"city\":\"\",\"state\":\"\",\"country\":\"\",\"zipcode\":\"\",\"email\":\"souravdas+upd@gmail.com\",\"phone\":\"9073806211\",\"udf1\":\"23\",\"udf2\":\"\",\"udf3\":\"\",\"udf4\":\"\",\"udf5\":\"\",\"udf6\":\"\",\"udf7\":\"\",\"udf8\":\"\",\"udf9\":\"\",\"udf10\":\"\",\"hash\":\"42bbaa07809e3880543767a81db990fd54e52bbd1aa11ef454aebaf5888d0b9b5f9174ac4e3a6a463b22f99baf6f40e5184144973243792136d0b2e06fa42556\",\"field1\":\"\",\"field2\":\"\",\"field3\":\"\",\"field4\":\"\",\"field5\":\"\",\"field6\":\"\",\"field7\":\"\",\"field8\":\"genericintent\",\"field9\":\"\",\"payment_source\":\"payu\",\"meCode\":\"{\\\"merchantVpa\\\":\\\"Oncab1.payu@mairtel\\\"}\",\"PG_TYPE\":\"UPI-PG\",\"bank_ref_num\":\"\",\"bankcode\":\"INTENT\",\"error\":\"E1206\",\"error_Message\":\"Transaction interrupted by pressing back button\"}', '2026-10-04 16:18:09', '2026-10-04 16:18:38'),
+(24, 24, NULL, NULL, NULL, NULL, 'payu', 'OC179113072215020825', '31097048039', '1.00', 'INR', 'DC', 'captured', 'payment_captured', '{\"0\":\"{\",\"1\":\"\\\"\",\"2\":\"b\",\"3\":\"o\",\"4\":\"o\",\"5\":\"k\",\"6\":\"i\",\"7\":\"n\",\"8\":\"g\",\"9\":\"_\",\"10\":\"r\",\"11\":\"e\",\"12\":\"f\",\"13\":\"e\",\"14\":\"r\",\"15\":\"e\",\"16\":\"n\",\"17\":\"c\",\"18\":\"e\",\"19\":\"\\\"\",\"20\":\":\",\"21\":\"\\\"\",\"22\":\"B\",\"23\":\"K\",\"24\":\"-\",\"25\":\"1\",\"26\":\"7\",\"27\":\"9\",\"28\":\"1\",\"29\":\"1\",\"30\":\"3\",\"31\":\"0\",\"32\":\"7\",\"33\":\"2\",\"34\":\"2\",\"35\":\"0\",\"36\":\"4\",\"37\":\"8\",\"38\":\"-\",\"39\":\"5\",\"40\":\"4\",\"41\":\"3\",\"42\":\"\\\"\",\"43\":\"}\",\"payu_status\":\"success\"}', '{\"mihpayid\":\"31097048039\",\"mode\":\"DC\",\"status\":\"success\",\"unmappedstatus\":\"captured\",\"key\":\"hDKAHq\",\"txnid\":\"OC179113072215020825\",\"amount\":\"1.00\",\"cardCategory\":\"domestic\",\"discount\":\"0.00\",\"net_amount_debit\":\"1\",\"addedon\":\"2026-10-04 21:48:42\",\"productinfo\":\"Booking BK-1791130722048-543\",\"firstname\":\"sourav das\",\"lastname\":\"\",\"address1\":\"\",\"address2\":\"\",\"city\":\"\",\"state\":\"\",\"country\":\"\",\"zipcode\":\"\",\"email\":\"souravdas+upd@gmail.com\",\"phone\":\"9073806211\",\"udf1\":\"24\",\"udf2\":\"\",\"udf3\":\"\",\"udf4\":\"\",\"udf5\":\"\",\"udf6\":\"\",\"udf7\":\"\",\"udf8\":\"\",\"udf9\":\"\",\"udf10\":\"\",\"hash\":\"706387ccd5feebf75fa427b49aa36ca2c3a8f75077a9de77d1572ee471f140ba45b2d8006f21f23beefc9da0025bc66764acdab84a27f51c8c3a8b484e0ba44b\",\"field1\":\"10042026 215241\",\"field2\":\"915936\",\"field3\":\"\",\"field4\":\"2\",\"field5\":\"\",\"field6\":\"05\",\"field7\":\"AUTHPOSITIVE\",\"field8\":\"00 | Successful approval/completion or that V.I.P. PIN verification is valid\",\"field9\":\"No Error\",\"payment_source\":\"payu\",\"meCode\":\"{\\\"MID\\\":\\\"39PU00000096285\\\",\\\"TID\\\":\\\"PU096285\\\"}\",\"PG_TYPE\":\"DC-PG\",\"bank_ref_num\":\"627721589297\",\"bankcode\":\"VISA\",\"error\":\"E000\",\"error_Message\":\"No Error\",\"cardnum\":\"XXXXXXXXXXXX7043\",\"cardhash\":\"This field is no longer supported in postback params.\"}', '2026-10-04 16:18:42', '2026-10-04 16:22:44');
 
 -- --------------------------------------------------------
 
@@ -686,11 +736,11 @@ INSERT INTO `payments` (`id`, `booking_id`, `passenger_id`, `razorpay_payment_id
 
 CREATE TABLE `permissions` (
   `id` int UNSIGNED NOT NULL,
-  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `display_name` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `module` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `action` enum('create','read','update','delete','manage') COLLATE utf8mb4_unicode_ci NOT NULL,
-  `description` text COLLATE utf8mb4_unicode_ci,
+  `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `display_name` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `module` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `action` enum('create','read','update','delete','manage') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -763,11 +813,12 @@ CREATE TABLE `rate_charts` (
 --
 
 INSERT INTO `rate_charts` (`id`, `route_id`, `origin_stop_id`, `destination_stop_id`, `fare_amount`, `created_at`, `updated_at`) VALUES
-(1, 1, NULL, NULL, '69.00', '2026-10-02 10:35:07', '2026-10-02 10:35:07'),
-(2, 4, NULL, NULL, '99.00', '2026-10-02 12:01:29', '2026-10-02 12:01:29'),
-(3, 3, NULL, NULL, '99.00', '2026-10-03 12:25:05', '2026-10-03 12:25:05'),
+(1, 1, NULL, NULL, '1.00', '2026-10-02 10:35:07', '2026-10-04 13:20:25'),
+(2, 4, NULL, NULL, '1.00', '2026-10-02 12:01:29', '2026-10-04 13:20:58'),
+(3, 3, NULL, NULL, '1.00', '2026-10-03 12:25:05', '2026-10-04 13:20:48'),
 (4, 4, 13, 14, '999.00', '2026-10-03 12:25:34', '2026-10-03 12:25:34'),
-(5, 5, NULL, NULL, '99.00', '2026-10-03 15:35:44', '2026-10-03 15:35:44');
+(5, 5, NULL, NULL, '1.00', '2026-10-03 15:35:44', '2026-10-04 13:21:30'),
+(6, 6, NULL, NULL, '1.00', '2026-10-03 21:01:39', '2026-10-04 13:21:18');
 
 -- --------------------------------------------------------
 
@@ -780,21 +831,28 @@ CREATE TABLE `refunds` (
   `booking_id` int UNSIGNED NOT NULL,
   `payment_id` int UNSIGNED DEFAULT NULL,
   `passenger_id` int UNSIGNED DEFAULT NULL,
-  `refund_reference` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `refund_reference` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `refund_amount` decimal(10,2) NOT NULL,
-  `refund_method` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `refund_reason` text COLLATE utf8mb4_unicode_ci,
-  `gateway_refund_id` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `refund_method` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `refund_reason` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `gateway_refund_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `gateway_response` json DEFAULT NULL,
-  `status` enum('pending','processing','completed','failed') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `status` enum('pending','processing','completed','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
   `initiated_by` int UNSIGNED DEFAULT NULL,
   `processed_at` datetime DEFAULT NULL,
-  `failure_reason` text COLLATE utf8mb4_unicode_ci,
+  `failure_reason` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `retry_count` int DEFAULT '0',
-  `notes` text COLLATE utf8mb4_unicode_ci,
+  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `refunds`
+--
+
+INSERT INTO `refunds` (`id`, `booking_id`, `payment_id`, `passenger_id`, `refund_reference`, `refund_amount`, `refund_method`, `refund_reason`, `gateway_refund_id`, `gateway_response`, `status`, `initiated_by`, `processed_at`, `failure_reason`, `retry_count`, `notes`, `created_at`, `updated_at`) VALUES
+(1, 24, 24, NULL, 'REF-1791182984783', '1.00', NULL, 'Cancelled by admin', NULL, '{\"msg\": \"Some problem occurred\", \"status\": 0}', 'failed', 1, NULL, 'Some problem occurred', 1, NULL, '2026-10-05 06:49:44', '2026-10-05 06:50:50');
 
 -- --------------------------------------------------------
 
@@ -804,9 +862,9 @@ CREATE TABLE `refunds` (
 
 CREATE TABLE `roles` (
   `id` int UNSIGNED NOT NULL,
-  `name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `display_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `description` text COLLATE utf8mb4_unicode_ci,
+  `name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `display_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
@@ -922,14 +980,14 @@ INSERT INTO `role_permissions` (`created_at`, `updated_at`, `role_id`, `permissi
 
 CREATE TABLE `routes` (
   `id` int UNSIGNED NOT NULL,
-  `route_name` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `route_code` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `origin_city` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `destination_city` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `route_name` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `route_code` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `origin_city` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `destination_city` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `total_distance` decimal(8,2) DEFAULT '0.00',
   `estimated_duration` int DEFAULT '0',
-  `description` text COLLATE utf8mb4_unicode_ci,
-  `status` enum('Active','Inactive') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
@@ -944,7 +1002,172 @@ INSERT INTO `routes` (`id`, `route_name`, `route_code`, `origin_city`, `destinat
 (2, 'fdas', 'sdf', 'sdf', 'fsd', '0.00', 0, '', 'Active', '2026-09-30 11:54:05', '2026-09-30 11:53:59', '2026-09-30 11:54:05'),
 (3, 'JOKA TO KADAMPUKUR', 'JOKTOKDP001', 'JOKA ', 'KADAMPUKUR', '40.00', 120, '', 'Active', NULL, '2026-09-30 11:55:18', '2026-10-01 13:49:03'),
 (4, 'Salt Lake Syamabazar', 'Salt-Syam-213', 'Salt Lake', 'Shyambazar', '30.00', 60, '', 'Active', NULL, '2026-10-01 10:35:22', '2026-10-03 11:58:54'),
-(5, 'garia-dhk', 'gd-4399843', 'garia', 'dakhineswar', '45.00', 110, 'sd', 'Active', NULL, '2026-10-03 15:35:10', '2026-10-03 15:49:55');
+(5, 'garia-dhk', 'gd-4399843', 'garia', 'dakhineswar', '45.00', 110, 'sd', 'Active', NULL, '2026-10-03 15:35:10', '2026-10-03 15:49:55'),
+(6, 'Garia to Bidhannagar', 'GAR-BID-001', 'Garia', 'Bidhannagar', '15.50', 45, 'OnCab Shuttle route from Garia to Bidhannagar via Dhalai Bridge, Ruby, Science City and Nicco Park.', 'Active', NULL, '2026-10-03 19:37:28', '2026-10-03 19:37:28'),
+(7, 'Bidhannagar to Garia', 'BID-GAR-001', 'Bidhannagar', 'Garia', '15.50', 45, 'OnCab Shuttle return route from Bidhannagar to Garia via Nicco Park, Science City, Ruby and Dhalai Bridge.', 'Active', NULL, '2026-10-03 19:37:28', '2026-10-03 19:37:28');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shuttle_bookings`
+--
+
+CREATE TABLE `shuttle_bookings` (
+  `id` bigint UNSIGNED NOT NULL,
+  `booking_id` varchar(50) NOT NULL,
+  `user_id` bigint UNSIGNED DEFAULT NULL,
+  `passenger_name` varchar(100) DEFAULT NULL,
+  `passenger_mobile` varchar(20) DEFAULT NULL,
+  `schedule_id` bigint UNSIGNED NOT NULL,
+  `route_id` bigint UNSIGNED NOT NULL,
+  `pickup_stop_id` bigint UNSIGNED NOT NULL,
+  `drop_stop_id` bigint UNSIGNED NOT NULL,
+  `travel_date` date NOT NULL,
+  `pickup_time` time NOT NULL,
+  `drop_time` time NOT NULL,
+  `fare` decimal(10,2) NOT NULL,
+  `seat_count` int UNSIGNED DEFAULT '1',
+  `total_amount` decimal(10,2) NOT NULL,
+  `status` enum('pending','confirmed','cancelled','completed','no_show') DEFAULT 'confirmed',
+  `payment_status` enum('pending','paid','failed','refunded') DEFAULT 'paid',
+  `payment_method` varchar(50) DEFAULT 'cash',
+  `qr_code` text,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shuttle_fares`
+--
+
+CREATE TABLE `shuttle_fares` (
+  `id` bigint UNSIGNED NOT NULL,
+  `route_id` bigint UNSIGNED DEFAULT NULL,
+  `from_stop_id` bigint UNSIGNED DEFAULT NULL,
+  `to_stop_id` bigint UNSIGNED DEFAULT NULL,
+  `fare` decimal(10,2) NOT NULL,
+  `minimum_fare` decimal(10,2) DEFAULT '0.00',
+  `currency` varchar(10) DEFAULT 'INR',
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shuttle_routes`
+--
+
+CREATE TABLE `shuttle_routes` (
+  `id` bigint UNSIGNED NOT NULL,
+  `route_code` varchar(50) NOT NULL,
+  `route_name` varchar(255) NOT NULL,
+  `display_name` varchar(255) DEFAULT NULL,
+  `origin_name` varchar(255) NOT NULL,
+  `destination_name` varchar(255) NOT NULL,
+  `direction` enum('outbound','return') DEFAULT 'outbound',
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shuttle_route_stops`
+--
+
+CREATE TABLE `shuttle_route_stops` (
+  `id` bigint UNSIGNED NOT NULL,
+  `route_id` bigint UNSIGNED NOT NULL,
+  `stop_id` bigint UNSIGNED NOT NULL,
+  `stop_sequence` int UNSIGNED NOT NULL,
+  `arrival_offset_minutes` int UNSIGNED DEFAULT '0',
+  `departure_offset_minutes` int UNSIGNED DEFAULT '0',
+  `distance_from_previous_km` decimal(8,2) DEFAULT '0.00',
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shuttle_schedules`
+--
+
+CREATE TABLE `shuttle_schedules` (
+  `id` bigint UNSIGNED NOT NULL,
+  `route_id` bigint UNSIGNED NOT NULL,
+  `vehicle_id` bigint UNSIGNED DEFAULT NULL,
+  `schedule_date` date DEFAULT NULL,
+  `day_of_week` varchar(100) DEFAULT NULL,
+  `departure_time` time NOT NULL,
+  `arrival_time` time DEFAULT NULL,
+  `total_seats` int UNSIGNED DEFAULT '20',
+  `available_seats` int UNSIGNED DEFAULT '20',
+  `status` enum('active','inactive','cancelled') DEFAULT 'active',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shuttle_schedule_stops`
+--
+
+CREATE TABLE `shuttle_schedule_stops` (
+  `id` bigint UNSIGNED NOT NULL,
+  `schedule_id` bigint UNSIGNED NOT NULL,
+  `route_stop_id` bigint UNSIGNED NOT NULL,
+  `arrival_time` time NOT NULL,
+  `departure_time` time NOT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shuttle_stops`
+--
+
+CREATE TABLE `shuttle_stops` (
+  `id` bigint UNSIGNED NOT NULL,
+  `stop_name` varchar(255) NOT NULL,
+  `stop_code` varchar(50) DEFAULT NULL,
+  `address` text,
+  `latitude` decimal(10,7) NOT NULL,
+  `longitude` decimal(10,7) NOT NULL,
+  `landmark` varchar(255) DEFAULT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shuttle_vehicles`
+--
+
+CREATE TABLE `shuttle_vehicles` (
+  `id` bigint UNSIGNED NOT NULL,
+  `vehicle_number` varchar(50) NOT NULL,
+  `vehicle_type` varchar(100) DEFAULT 'Shuttle Bus',
+  `route_id` bigint UNSIGNED DEFAULT NULL,
+  `capacity` int UNSIGNED DEFAULT '20',
+  `status` enum('active','inactive','maintenance') DEFAULT 'active',
+  `latitude` decimal(10,7) DEFAULT NULL,
+  `longitude` decimal(10,7) DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -955,14 +1178,14 @@ INSERT INTO `routes` (`id`, `route_name`, `route_code`, `origin_city`, `destinat
 CREATE TABLE `stops` (
   `id` int UNSIGNED NOT NULL,
   `route_id` int UNSIGNED NOT NULL,
-  `stop_name` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `stop_code` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `stop_name` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `stop_code` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `stop_sequence` int DEFAULT '0',
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
-  `address` text COLLATE utf8mb4_unicode_ci,
-  `landmark` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `status` enum('Active','Inactive') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `address` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `landmark` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -995,7 +1218,17 @@ INSERT INTO `stops` (`id`, `route_id`, `stop_name`, `stop_code`, `stop_sequence`
 (21, 5, 'Bidhannagar', NULL, 4, '22.5904250', '88.4169200', 'Bidhannagar, West Bengal, India', NULL, 'Active', '2026-10-03 15:35:10', '2026-10-03 15:49:55'),
 (22, 5, 'North Dumdum', NULL, 5, '22.6660837', '88.4211986', 'North Dumdum, West Bengal, India', NULL, 'Active', '2026-10-03 15:35:10', '2026-10-03 15:49:55'),
 (23, 5, 'Dunlop', NULL, 6, '22.6524964', '88.3773002', 'Dunlop, Baranagar, West Bengal, India', NULL, 'Active', '2026-10-03 15:35:10', '2026-10-03 15:49:55'),
-(24, 5, 'Dakshineswar', NULL, 7, '22.6557497', '88.3606419', 'Dakshineswar, Bally, West Bengal, India', NULL, 'Active', '2026-10-03 15:35:10', '2026-10-03 15:49:55');
+(24, 5, 'Dakshineswar', NULL, 7, '22.6557497', '88.3606419', 'Dakshineswar, Bally, West Bengal, India', NULL, 'Active', '2026-10-03 15:35:10', '2026-10-03 15:49:55'),
+(25, 6, 'Garia', 'GARIA-001', 1, '22.4615000', '88.3796000', 'Garia, Kolkata, West Bengal', 'Garia area', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43'),
+(26, 6, 'Patuli', 'PATULI-001', 2, '22.4725000', '88.3835000', 'Patuli, Kolkata, West Bengal', 'Patuli area', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43'),
+(27, 6, 'Baishnabghata', 'BAISH-001', 3, '22.4749000', '88.3930000', 'Baishnabghata, Kolkata, West Bengal', 'Baishnabghata area', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43'),
+(28, 6, 'Dhalai Bridge (after signal)', 'DHALAI-001', 4, '22.4778000', '88.3990000', 'Garia Dhala Bridge, Kolkata, West Bengal', 'Dhalai Bridge', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43'),
+(29, 6, 'Ruby', 'RUBY-001', 5, '22.5128000', '88.4010000', 'Ruby Crossing, Kolkata, West Bengal', 'Ruby General Hospital', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43'),
+(30, 6, 'Science City', 'SCIENCE-001', 6, '22.5390000', '88.3980000', 'Science City, Kolkata, West Bengal', 'Science City', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43'),
+(31, 6, 'Chingrighata', 'CHING-001', 7, '22.5470000', '88.4050000', 'Chingrighata, Kolkata, West Bengal', 'Chingrighata Crossing', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43'),
+(32, 6, 'Salt Lake Stadium', 'SALTSTAD-001', 8, '22.5690000', '88.4030000', 'Salt Lake Stadium, Kolkata, West Bengal', 'Salt Lake Stadium', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43'),
+(33, 6, 'Nicco Park', 'NICCO-001', 9, '22.5737000', '88.4060000', 'Salt Lake Bypass, Kolkata, West Bengal', 'Nicco Park', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43'),
+(34, 6, 'Bidhannagar', 'BIDHAN-001', 10, '22.5790000', '88.4120000', 'Bidhannagar, Kolkata, West Bengal', 'Bidhannagar', 'Active', '2026-10-03 19:38:43', '2026-10-03 19:38:43');
 
 -- --------------------------------------------------------
 
@@ -1005,12 +1238,12 @@ INSERT INTO `stops` (`id`, `route_id`, `stop_name`, `stop_code`, `stop_sequence`
 
 CREATE TABLE `system_settings` (
   `id` int UNSIGNED NOT NULL,
-  `key` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `value` text COLLATE utf8mb4_unicode_ci,
-  `type` enum('string','number','boolean','json','text') COLLATE utf8mb4_unicode_ci DEFAULT 'string',
-  `group` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'general',
-  `label` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `description` text COLLATE utf8mb4_unicode_ci,
+  `key` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `value` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `type` enum('string','number','boolean','json','text') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'string',
+  `group` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'general',
+  `label` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `is_public` tinyint(1) DEFAULT '0',
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
@@ -1043,10 +1276,60 @@ CREATE TABLE `trips` (
   `id` int UNSIGNED NOT NULL,
   `route_id` int UNSIGNED NOT NULL,
   `bus_type_id` int UNSIGNED DEFAULT NULL,
-  `schedule_code` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `schedule_code` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `departure_time` time NOT NULL,
   `arrival_time` time DEFAULT NULL,
-  `operating_days` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `operating_days` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `booked_seats` int DEFAULT '0',
+  `trip_date` date DEFAULT NULL,
+  `valid_from` date DEFAULT NULL,
+  `valid_until` date DEFAULT NULL,
+  `driver_id` int UNSIGNED DEFAULT NULL,
+  `vehicle_id` int UNSIGNED DEFAULT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `status` enum('Scheduled','Active','Completed','Cancelled','Delayed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Scheduled',
+  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `deleted_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `trips`
+--
+
+INSERT INTO `trips` (`id`, `route_id`, `bus_type_id`, `schedule_code`, `departure_time`, `arrival_time`, `operating_days`, `booked_seats`, `trip_date`, `valid_from`, `valid_until`, `driver_id`, `vehicle_id`, `started_at`, `completed_at`, `status`, `notes`, `deleted_at`, `created_at`, `updated_at`) VALUES
+(1, 1, 1, 'SCH-2026-2094', '08:00:00', '09:30:00', 'Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday', 0, NULL, '2026-09-29', NULL, NULL, NULL, '2026-09-29 07:57:09', '2026-09-29 07:57:15', 'Completed', 'WB-56HH66-8', '2026-10-01 10:26:32', '2026-09-29 07:05:42', '2026-10-03 20:22:38'),
+(2, 3, 3, 'SCH-2026-7070', '07:30:00', NULL, 'Thursday', 0, '2026-10-01', NULL, '2026-10-01', 2, 2, NULL, '2026-10-01 10:22:00', 'Scheduled', NULL, '2026-10-01 10:26:30', '2026-10-01 06:48:15', '2026-10-03 20:22:38'),
+(3, 1, 3, 'SCH-2026-101', '06:30:00', NULL, 'Wednesday', 4, '2026-09-30', NULL, '2026-09-30', 1, 1, '2026-10-01 13:29:13', '2026-10-01 13:29:28', 'Completed', NULL, NULL, '2026-10-01 10:26:45', '2026-10-04 08:46:16'),
+(4, 2, 3, 'SCH-2026-102', '08:00:00', NULL, 'Wednesday', 0, '2026-09-30', NULL, '2026-09-30', 2, 2, NULL, NULL, 'Scheduled', NULL, NULL, '2026-10-01 10:26:45', '2026-10-03 20:22:38'),
+(5, 3, 3, 'SCH-2026-4455', '17:01:00', NULL, 'Thursday', 0, '2026-10-01', NULL, '2026-10-01', 2, 2, '2026-10-01 13:19:21', '2026-10-04 18:48:31', 'Completed', NULL, NULL, '2026-10-01 10:30:20', '2026-10-04 18:48:31'),
+(6, 4, 3, 'SCH-2026-1815', '19:47:00', NULL, 'Thursday', 0, '2026-10-01', NULL, '2026-10-01', 2, 2, '2026-10-02 07:16:09', NULL, 'Active', NULL, NULL, '2026-10-01 13:16:43', '2026-10-03 20:22:38'),
+(7, 4, 3, 'SCH-2026-7578', '13:51:00', NULL, 'Friday', 0, '2026-10-02', NULL, '2026-10-02', 1, 2, '2026-10-02 08:21:02', '2026-10-02 08:21:58', 'Completed', NULL, NULL, '2026-10-02 08:20:37', '2026-10-03 20:22:38'),
+(8, 3, 3, 'SCH-2026-1961', '17:25:00', NULL, 'Friday', 0, '2026-10-02', NULL, '2026-10-02', 1, 2, '2026-10-02 10:56:21', '2026-10-02 10:56:26', 'Completed', NULL, NULL, '2026-10-02 10:54:38', '2026-10-03 20:22:38'),
+(9, 1, 3, 'SCH-2026-9110', '20:00:00', NULL, 'Friday', 0, '2026-10-02', NULL, '2026-10-02', 1, 2, '2026-10-02 14:39:32', '2026-10-03 07:41:31', 'Completed', NULL, NULL, '2026-10-02 14:28:12', '2026-10-03 20:22:38'),
+(10, 5, 3, 'SCH-2026-5363', '21:20:00', '22:14:00', 'Saturday', 0, '2026-10-03', NULL, '2026-10-03', 3, 2, NULL, NULL, 'Scheduled', NULL, NULL, '2026-10-03 15:48:42', '2026-10-03 20:22:38'),
+(11, 6, 3, 'SCH-2026-8537', '02:12:00', '02:10:00', NULL, 18, '2026-10-04', NULL, NULL, 3, 2, NULL, NULL, 'Scheduled', NULL, NULL, '2026-10-03 20:36:02', '2026-10-04 13:40:32'),
+(12, 6, 3, 'SCH-2026-2017', '02:00:00', NULL, NULL, 5, '2026-10-05', NULL, NULL, 2, 1, NULL, NULL, 'Scheduled', NULL, NULL, '2026-10-03 20:43:02', '2026-10-05 06:59:08'),
+(13, 5, 3, 'SCH-2026-2688', '20:49:00', NULL, NULL, 0, '2026-10-05', NULL, NULL, 3, 2, NULL, NULL, 'Scheduled', NULL, NULL, '2026-10-04 15:19:36', '2026-10-04 15:19:36'),
+(14, 6, 3, 'SCH-2026-2723', '20:51:00', NULL, NULL, 3, '2026-10-06', NULL, NULL, 3, 2, NULL, NULL, 'Scheduled', NULL, NULL, '2026-10-04 15:21:09', '2026-10-05 06:49:44'),
+(15, 6, 3, 'SCH-2026-7528', '21:11:00', NULL, NULL, 0, '2026-10-07', NULL, NULL, 3, 2, NULL, NULL, 'Scheduled', NULL, NULL, '2026-10-04 15:41:59', '2026-10-04 15:41:59');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `trips_backup_20261004`
+--
+
+CREATE TABLE `trips_backup_20261004` (
+  `id` int UNSIGNED NOT NULL DEFAULT '0',
+  `route_id` int UNSIGNED NOT NULL,
+  `bus_type_id` int UNSIGNED DEFAULT NULL,
+  `schedule_code` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `departure_time` time NOT NULL,
+  `arrival_time` time DEFAULT NULL,
+  `operating_days` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `base_fare` decimal(10,2) DEFAULT '0.00',
   `fare_per_km` decimal(8,2) DEFAULT '0.00',
   `seat_capacity` int DEFAULT '0',
@@ -1058,18 +1341,18 @@ CREATE TABLE `trips` (
   `vehicle_id` int UNSIGNED DEFAULT NULL,
   `started_at` datetime DEFAULT NULL,
   `completed_at` datetime DEFAULT NULL,
-  `status` enum('Scheduled','Active','Completed','Cancelled','Delayed') COLLATE utf8mb4_unicode_ci DEFAULT 'Scheduled',
-  `notes` text COLLATE utf8mb4_unicode_ci,
+  `status` enum('Scheduled','Active','Completed','Cancelled','Delayed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Scheduled',
+  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
--- Dumping data for table `trips`
+-- Dumping data for table `trips_backup_20261004`
 --
 
-INSERT INTO `trips` (`id`, `route_id`, `bus_type_id`, `schedule_code`, `departure_time`, `arrival_time`, `operating_days`, `base_fare`, `fare_per_km`, `seat_capacity`, `booked_seats`, `trip_date`, `valid_from`, `valid_until`, `driver_id`, `vehicle_id`, `started_at`, `completed_at`, `status`, `notes`, `deleted_at`, `created_at`, `updated_at`) VALUES
+INSERT INTO `trips_backup_20261004` (`id`, `route_id`, `bus_type_id`, `schedule_code`, `departure_time`, `arrival_time`, `operating_days`, `base_fare`, `fare_per_km`, `seat_capacity`, `booked_seats`, `trip_date`, `valid_from`, `valid_until`, `driver_id`, `vehicle_id`, `started_at`, `completed_at`, `status`, `notes`, `deleted_at`, `created_at`, `updated_at`) VALUES
 (1, 1, 1, 'SCH-2026-2094', '08:00:00', '09:30:00', 'Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday', '45.00', '2.50', 0, 0, NULL, '2026-09-29', NULL, NULL, NULL, '2026-09-29 07:57:09', '2026-09-29 07:57:15', 'Completed', 'WB-56HH66-8', '2026-10-01 10:26:32', '2026-09-29 07:05:42', '2026-10-01 10:26:32'),
 (2, 3, NULL, 'SCH-2026-7070', '07:30:00', NULL, NULL, '0.00', '0.00', 40, 0, '2026-10-01', NULL, NULL, 2, 2, NULL, '2026-10-01 10:22:00', 'Scheduled', NULL, '2026-10-01 10:26:30', '2026-10-01 06:48:15', '2026-10-01 10:26:30'),
 (3, 1, NULL, 'SCH-2026-101', '06:30:00', NULL, NULL, '0.00', '0.00', 40, 2, '2026-09-30', NULL, NULL, 1, 1, '2026-10-01 13:29:13', '2026-10-01 13:29:28', 'Completed', NULL, NULL, '2026-10-01 10:26:45', '2026-10-03 09:30:46'),
@@ -7870,20 +8153,20 @@ CREATE TABLE `vehicles` (
   `driver_id` int UNSIGNED DEFAULT NULL,
   `vehicle_type_id` int UNSIGNED DEFAULT NULL,
   `bus_type_id` int UNSIGNED DEFAULT NULL,
-  `registration_number` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `company_model` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `engine_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `color` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `registration_number` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `company_model` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `engine_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `color` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `total_seats` int DEFAULT '0',
-  `engine_number` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `chassis_number` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `garage_address` text COLLATE utf8mb4_unicode_ci,
+  `engine_number` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `chassis_number` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `garage_address` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
   `purchase_date` date DEFAULT NULL,
-  `rc_certificate_img` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `vehicle_img` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `status` enum('Active','Inactive','Under Maintenance') COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
+  `rc_certificate_img` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `vehicle_img` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('Active','Inactive','Under Maintenance') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Active',
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
@@ -7906,13 +8189,13 @@ INSERT INTO `vehicles` (`id`, `owner_id`, `driver_id`, `vehicle_type_id`, `bus_t
 CREATE TABLE `vehicle_documents` (
   `id` int UNSIGNED NOT NULL,
   `vehicle_id` int UNSIGNED NOT NULL,
-  `doc_type` enum('insurance','fitness','pollution','registration','permit','other') COLLATE utf8mb4_unicode_ci NOT NULL,
-  `doc_number` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `doc_img` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `doc_type` enum('insurance','fitness','pollution','registration','permit','other') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `doc_number` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `doc_img` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `issue_date` date DEFAULT NULL,
   `expiry_date` date DEFAULT NULL,
-  `status` enum('Valid','Expired','Expiring Soon') COLLATE utf8mb4_unicode_ci DEFAULT 'Valid',
-  `notes` text COLLATE utf8mb4_unicode_ci,
+  `status` enum('Valid','Expired','Expiring Soon') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Valid',
+  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -8098,6 +8381,69 @@ ALTER TABLE `routes`
   ADD UNIQUE KEY `route_code` (`route_code`);
 
 --
+-- Indexes for table `shuttle_bookings`
+--
+ALTER TABLE `shuttle_bookings`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `booking_id` (`booking_id`),
+  ADD KEY `schedule_id` (`schedule_id`),
+  ADD KEY `route_id` (`route_id`),
+  ADD KEY `pickup_stop_id` (`pickup_stop_id`),
+  ADD KEY `drop_stop_id` (`drop_stop_id`);
+
+--
+-- Indexes for table `shuttle_fares`
+--
+ALTER TABLE `shuttle_fares`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `route_id` (`route_id`),
+  ADD KEY `from_stop_id` (`from_stop_id`),
+  ADD KEY `to_stop_id` (`to_stop_id`);
+
+--
+-- Indexes for table `shuttle_routes`
+--
+ALTER TABLE `shuttle_routes`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `route_code` (`route_code`);
+
+--
+-- Indexes for table `shuttle_route_stops`
+--
+ALTER TABLE `shuttle_route_stops`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `route_id` (`route_id`),
+  ADD KEY `stop_id` (`stop_id`);
+
+--
+-- Indexes for table `shuttle_schedules`
+--
+ALTER TABLE `shuttle_schedules`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `route_id` (`route_id`);
+
+--
+-- Indexes for table `shuttle_schedule_stops`
+--
+ALTER TABLE `shuttle_schedule_stops`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `schedule_id` (`schedule_id`),
+  ADD KEY `route_stop_id` (`route_stop_id`);
+
+--
+-- Indexes for table `shuttle_stops`
+--
+ALTER TABLE `shuttle_stops`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `shuttle_vehicles`
+--
+ALTER TABLE `shuttle_vehicles`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `vehicle_number` (`vehicle_number`);
+
+--
 -- Indexes for table `stops`
 --
 ALTER TABLE `stops`
@@ -8164,13 +8510,13 @@ ALTER TABLE `admin_users`
 -- AUTO_INCREMENT for table `audit_logs`
 --
 ALTER TABLE `audit_logs`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=186;
 
 --
 -- AUTO_INCREMENT for table `bookings`
 --
 ALTER TABLE `bookings`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
 
 --
 -- AUTO_INCREMENT for table `bus_driver_assignments`
@@ -8200,7 +8546,7 @@ ALTER TABLE `bus_stops`
 -- AUTO_INCREMENT for table `bus_types`
 --
 ALTER TABLE `bus_types`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `coupons`
@@ -8224,7 +8570,7 @@ ALTER TABLE `driver_details`
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `passengers`
@@ -8242,7 +8588,7 @@ ALTER TABLE `passes`
 -- AUTO_INCREMENT for table `payments`
 --
 ALTER TABLE `payments`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
 
 --
 -- AUTO_INCREMENT for table `permissions`
@@ -8254,13 +8600,13 @@ ALTER TABLE `permissions`
 -- AUTO_INCREMENT for table `rate_charts`
 --
 ALTER TABLE `rate_charts`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `refunds`
 --
 ALTER TABLE `refunds`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `roles`
@@ -8272,13 +8618,61 @@ ALTER TABLE `roles`
 -- AUTO_INCREMENT for table `routes`
 --
 ALTER TABLE `routes`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+
+--
+-- AUTO_INCREMENT for table `shuttle_bookings`
+--
+ALTER TABLE `shuttle_bookings`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `shuttle_fares`
+--
+ALTER TABLE `shuttle_fares`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `shuttle_routes`
+--
+ALTER TABLE `shuttle_routes`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `shuttle_route_stops`
+--
+ALTER TABLE `shuttle_route_stops`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `shuttle_schedules`
+--
+ALTER TABLE `shuttle_schedules`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `shuttle_schedule_stops`
+--
+ALTER TABLE `shuttle_schedule_stops`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `shuttle_stops`
+--
+ALTER TABLE `shuttle_stops`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `shuttle_vehicles`
+--
+ALTER TABLE `shuttle_vehicles`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `stops`
 --
 ALTER TABLE `stops`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=40;
 
 --
 -- AUTO_INCREMENT for table `system_settings`
@@ -8290,7 +8684,7 @@ ALTER TABLE `system_settings`
 -- AUTO_INCREMENT for table `trips`
 --
 ALTER TABLE `trips`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `users`
@@ -8392,6 +8786,43 @@ ALTER TABLE `refunds`
 ALTER TABLE `role_permissions`
   ADD CONSTRAINT `role_permissions_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `role_permissions_ibfk_2` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `shuttle_bookings`
+--
+ALTER TABLE `shuttle_bookings`
+  ADD CONSTRAINT `shuttle_bookings_ibfk_1` FOREIGN KEY (`schedule_id`) REFERENCES `shuttle_schedules` (`id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `shuttle_bookings_ibfk_2` FOREIGN KEY (`route_id`) REFERENCES `shuttle_routes` (`id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `shuttle_bookings_ibfk_3` FOREIGN KEY (`pickup_stop_id`) REFERENCES `shuttle_stops` (`id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `shuttle_bookings_ibfk_4` FOREIGN KEY (`drop_stop_id`) REFERENCES `shuttle_stops` (`id`) ON UPDATE CASCADE;
+
+--
+-- Constraints for table `shuttle_fares`
+--
+ALTER TABLE `shuttle_fares`
+  ADD CONSTRAINT `shuttle_fares_ibfk_1` FOREIGN KEY (`route_id`) REFERENCES `shuttle_routes` (`id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `shuttle_fares_ibfk_2` FOREIGN KEY (`from_stop_id`) REFERENCES `shuttle_stops` (`id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `shuttle_fares_ibfk_3` FOREIGN KEY (`to_stop_id`) REFERENCES `shuttle_stops` (`id`) ON UPDATE CASCADE;
+
+--
+-- Constraints for table `shuttle_route_stops`
+--
+ALTER TABLE `shuttle_route_stops`
+  ADD CONSTRAINT `shuttle_route_stops_ibfk_1` FOREIGN KEY (`route_id`) REFERENCES `shuttle_routes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `shuttle_route_stops_ibfk_2` FOREIGN KEY (`stop_id`) REFERENCES `shuttle_stops` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `shuttle_schedules`
+--
+ALTER TABLE `shuttle_schedules`
+  ADD CONSTRAINT `shuttle_schedules_ibfk_1` FOREIGN KEY (`route_id`) REFERENCES `shuttle_routes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `shuttle_schedule_stops`
+--
+ALTER TABLE `shuttle_schedule_stops`
+  ADD CONSTRAINT `shuttle_schedule_stops_ibfk_1` FOREIGN KEY (`schedule_id`) REFERENCES `shuttle_schedules` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `shuttle_schedule_stops_ibfk_2` FOREIGN KEY (`route_stop_id`) REFERENCES `shuttle_route_stops` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `stops`

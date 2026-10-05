@@ -1,9 +1,9 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Refund, Booking, Payment, Passenger } = require('../models');
+const { Refund, Booking, Payment, Passenger, WalletTransaction, sequelize } = require('../models');
 const { logAction } = require('../middleware/auditLog');
-const { initiateRefund, checkRefundStatus } = require('../utils/payu');
+const { checkRefundStatus } = require('../utils/payu');
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -59,55 +59,103 @@ exports.completedList = async (req, res, next) => {
 
 // ── Process Refund ─────────────────────────────────────────
 exports.process = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
-    const refund = await Refund.findByPk(req.params.id, { include: REFUND_INCLUDE });
-    if (!refund) return res.status(404).json({ success: false, message: 'Refund not found' });
-    if (refund.status === 'completed') return res.status(400).json({ success: false, message: 'Refund already processed' });
-    if (refund.status === 'processing') return res.status(409).json({ success: false, message: 'Refund is already processing' });
-
-    const payment = refund.payment || await Payment.findOne({ where: { booking_id: refund.booking_id, status: { [Op.in]: ['captured', 'partial_refund'] } }, order: [['created_at', 'DESC']] });
-    if (payment?.payment_gateway === 'payu') {
-      if (!payment.payu_mihpayid) {
-        return res.status(409).json({ success: false, message: 'PayU payment reference is missing; cannot issue refund' });
-      }
-
-      const refundToken = `${refund.refund_reference}-${refund.retry_count || 0}`.slice(0, 50);
-      try {
-        const result = await initiateRefund({
-          mihpayid: payment.payu_mihpayid,
-          amount: refund.refund_amount,
-          refundToken,
-        });
-        if (Number(result.status) !== 1) {
-          const failure = result.msg || result.message || 'PayU rejected the refund request';
-          await refund.update({ status: 'failed', failure_reason: failure, gateway_response: result });
-          return res.status(502).json({ success: false, message: failure, data: refund });
-        }
-
-        const requestId = result.request_id || result.refund_id || refundToken;
-        await refund.update({
-          status: 'processing',
-          refund_method: 'payu',
-          gateway_refund_id: String(requestId),
-          gateway_response: result,
-          notes: req.body.notes || refund.notes,
-          failure_reason: null,
-        });
-        await logAction({ userId: req.user?.id, userType: req.user?.role?.name, userName: req.user?.name, action: 'initiate_refund', module: 'refunds', entityType: 'Refund', entityId: refund.id, newValues: { status: 'processing', gateway_refund_id: String(requestId) }, ipAddress: req.ip, description: `Initiated PayU refund ${refund.refund_reference}` });
-        return res.json({ success: true, message: 'PayU refund initiated; verify its status before marking it complete', data: refund });
-      } catch (gatewayError) {
-        await refund.update({ status: 'failed', failure_reason: gatewayError.message });
-        throw gatewayError;
-      }
+    const refund = await Refund.findByPk(req.params.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!refund) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, message: 'Refund not found' });
+    }
+    if (refund.status === 'completed') {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, message: 'Refund already processed' });
+    }
+    if (refund.status === 'processing') {
+      await transaction.rollback();
+      return res.status(409).json({ success: false, message: 'Refund is already processing' });
     }
 
-    const { gateway_refund_id, notes } = req.body;
-    await refund.update({ status: 'completed', gateway_refund_id, notes, processed_at: new Date() });
+    const booking = await Booking.findByPk(refund.booking_id, { transaction });
+    const passengerId = refund.passenger_id || booking?.passenger_id;
+    const passenger = passengerId
+      ? await Passenger.findByPk(passengerId, { transaction, lock: transaction.LOCK.UPDATE })
+      : null;
+    if (!passenger) {
+      await transaction.rollback();
+      return res.status(409).json({ success: false, message: 'Passenger wallet account was not found; refund cannot be credited' });
+    }
 
-    await logAction({ userId: req.user?.id, userType: req.user?.role?.name, userName: req.user?.name, action: 'process_refund', module: 'refunds', entityType: 'Refund', entityId: refund.id, newValues: { status: 'completed', gateway_refund_id }, ipAddress: req.ip, description: `Processed refund ${refund.refund_reference}` });
+    const refundAmount = Number(refund.refund_amount);
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, message: 'Refund amount must be greater than zero' });
+    }
 
-    res.json({ success: true, message: 'Refund processed', data: refund });
+    const balanceAfter = Number(passenger.wallet_balance || 0) + refundAmount;
+    await passenger.update({ wallet_balance: balanceAfter }, { transaction });
+    await WalletTransaction.create({
+      passenger_id: passenger.id,
+      type: 'credit',
+      amount: refundAmount,
+      balance_after: balanceAfter,
+      source: 'refund',
+      reference_type: 'refund',
+      reference_id: String(refund.id),
+      description: `Refund ${refund.refund_reference}`,
+    }, { transaction });
+
+    await refund.update({
+      passenger_id: passenger.id,
+      status: 'completed',
+      refund_method: 'wallet',
+      gateway_refund_id: null,
+      notes: req.body.notes || refund.notes,
+      failure_reason: null,
+      processed_at: new Date(),
+    }, { transaction });
+
+    const payment = refund.payment_id
+      ? await Payment.findByPk(refund.payment_id, { transaction, lock: transaction.LOCK.UPDATE })
+      : await Payment.findOne({
+        where: { booking_id: refund.booking_id, status: { [Op.in]: ['captured', 'partial_refund'] } },
+        order: [['created_at', 'DESC']],
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+    if (payment) {
+      if (!refund.payment_id) {
+        await refund.update({ payment_id: payment.id }, { transaction });
+      }
+      const refundedAmount = await Refund.sum('refund_amount', {
+        where: { payment_id: payment.id, status: 'completed' },
+        transaction,
+      });
+      const isFullRefund = Number(refundedAmount || 0) >= Number(payment.amount);
+      await payment.update({ status: isFullRefund ? 'refunded' : 'partial_refund' }, { transaction });
+    }
+    if (booking) {
+      const bookingRefundedAmount = await Refund.sum('refund_amount', {
+        where: { booking_id: booking.id, status: 'completed' },
+        transaction,
+      });
+      const isBookingFullyRefunded = Number(bookingRefundedAmount || 0) >= Number(booking.final_amount);
+      await booking.update({ payment_status: isBookingFullyRefunded ? 'refunded' : 'partial_refund' }, { transaction });
+    }
+
+    await transaction.commit();
+    await logAction({ userId: req.user?.id, userType: req.user?.role?.name, userName: req.user?.name, action: 'process_refund', module: 'refunds', entityType: 'Refund', entityId: refund.id, newValues: { status: 'completed', refund_method: 'wallet', passenger_id: passenger.id, refund_amount: refundAmount }, ipAddress: req.ip, description: `Credited refund ${refund.refund_reference} to passenger wallet` });
+
+    const completedRefund = await Refund.findByPk(refund.id, { include: REFUND_INCLUDE });
+    return res.json({
+      success: true,
+      message: 'Refund credited to passenger wallet',
+      data: { ...completedRefund.toJSON(), wallet_balance: balanceAfter },
+    });
   } catch (err) {
+    if (!transaction.finished) await transaction.rollback();
     next(err);
   }
 };

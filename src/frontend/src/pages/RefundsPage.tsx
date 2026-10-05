@@ -62,14 +62,14 @@ export const RefundsPage: React.FC<RefundsPageProps> = ({ onNotify }) => {
     }
   };
 
-  const handleProcessPayU = async (refund: any) => {
+  const handleProcessWalletRefund = async (refund: any) => {
     setProcessingId(refund.id);
     try {
       const response = await refundsAPI.process(refund.id, {});
-      onNotify(response.data.message || 'Refund submitted to PayU');
+      onNotify(response.data.message || 'Refund credited to passenger wallet');
       await fetchRefunds();
     } catch (err: any) {
-      onNotify(err.response?.data?.message || 'Unable to initiate PayU refund', 'error');
+      onNotify(err.response?.data?.message || 'Unable to credit passenger wallet', 'error');
     } finally {
       setProcessingId(null);
     }
@@ -176,9 +176,9 @@ export const RefundsPage: React.FC<RefundsPageProps> = ({ onNotify }) => {
                         Retry
                       </Button>
                     )}
-                    {r.status === 'pending' && r.payment?.payment_gateway === 'payu' && (
-                      <Button size="sm" variant="secondary" loading={processingId === r.id} onClick={() => handleProcessPayU(r)}>
-                        Refund via PayU
+                    {r.status === 'pending' && (
+                      <Button size="sm" variant="secondary" loading={processingId === r.id} onClick={() => handleProcessWalletRefund(r)}>
+                        Credit to Wallet
                       </Button>
                     )}
                     {r.status === 'processing' && r.refund_method === 'payu' && (

@@ -29,6 +29,7 @@ const CustomerUser = sequelize.define('CustomerUser', {
   first_time_login: { type: DataTypes.STRING(255), defaultValue: null },
   remember_token: { type: DataTypes.STRING(100), defaultValue: null },
   complete_status: { type: DataTypes.STRING(50), defaultValue: null },
+  wallet_balance: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
 }, {
   tableName: 'users',
   timestamps: true,

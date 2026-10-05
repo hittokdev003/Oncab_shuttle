@@ -29,6 +29,7 @@ const Notification = require('./Notification');
 const AuditLog = require('./AuditLog');
 const SystemSetting = require('./SystemSetting');
 const RateChart = require('./RateChart');
+const WalletTransaction = require('./WalletTransaction');
 
 // ─── Role & Permission Associations ─────────────────────
 Role.belongsToMany(Permission, {
@@ -109,6 +110,8 @@ Trip.hasMany(Booking, { foreignKey: 'trip_id', as: 'bookings' });
 
 Booking.belongsTo(Passenger, { foreignKey: 'passenger_id', as: 'passenger' });
 Passenger.hasMany(Booking, { foreignKey: 'passenger_id', as: 'bookings' });
+Passenger.hasMany(WalletTransaction, { foreignKey: 'passenger_id', as: 'wallet_transactions' });
+WalletTransaction.belongsTo(Passenger, { foreignKey: 'passenger_id', as: 'passenger' });
 
 Booking.belongsTo(Stop, { foreignKey: 'origin_stop_id', as: 'origin_stop' });
 Booking.belongsTo(Stop, { foreignKey: 'destination_stop_id', as: 'destination_stop' });
@@ -168,4 +171,5 @@ module.exports = {
   AuditLog,
   SystemSetting,
   RateChart,
+  WalletTransaction,
 };

@@ -2,7 +2,7 @@
 
 const { Op, fn, col } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
-const { BusType, BusRoute, BusSchedule, BusStop, Trip, Booking, Vehicle, Stop, Route, BusDriverAssignment, Passenger, Coupon, RateChart, Driver, DriverDetail } = require('../models');
+const { BusType, BusRoute, BusSchedule, BusStop, Trip, Booking, Vehicle, Stop, Route, BusDriverAssignment, Passenger, Coupon, RateChart, Driver, DriverDetail, Payment, WalletTransaction } = require('../models');
 const sequelize = require('../config/database');
 const { resolveFare } = require('../utils/fareCalculator');
 
@@ -1338,6 +1338,9 @@ exports.cancelUserBooking = async (req, res, next) => {
     }
 
     if (booking.payment_status === 'paid') {
+      const passenger = booking.passenger_id
+        ? await Passenger.findByPk(booking.passenger_id, { transaction: t })
+        : await Passenger.findOne({ where: { mobile: booking.passenger_mobile }, transaction: t });
       const payment = await Payment.findOne({
         where: { booking_id: booking.id, status: ['captured', 'partial_refund'] },
         order: [['created_at', 'DESC']],
@@ -1346,7 +1349,7 @@ exports.cancelUserBooking = async (req, res, next) => {
       await Refund.create({
         booking_id: booking.id,
         payment_id: payment?.id || null,
-        passenger_id: booking.passenger_id,
+        passenger_id: passenger?.id || booking.passenger_id,
         refund_reference: `REF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         refund_amount: booking.final_amount,
         refund_reason: cancellation_reason || 'Cancelled by user',
@@ -1392,6 +1395,7 @@ exports.createBooking = async (req, res, next) => {
       seat_numbers,
       total_seats,
       payment_method,
+      use_wallet,
       coupon_id,
       special_requests
     } = body;
@@ -1473,6 +1477,41 @@ exports.createBooking = async (req, res, next) => {
     }
 
     const final_amount = Math.max(0, total_fare - discount_amount);
+    const walletPaymentRequested = use_wallet === true || String(use_wallet).toLowerCase() === 'true' || payment_method === 'wallet';
+    let walletPassenger = null;
+    let walletBalanceAfter = null;
+    if (walletPaymentRequested) {
+      if (!passenger_id) {
+        await t.rollback();
+        return res.status(400).json({ status: 400, success: false, message: 'passenger_id is required for wallet payment' });
+      }
+      walletPassenger = await Passenger.findOne({
+        where: { id: passenger_id, mobile: String(passenger_mobile).trim() },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!walletPassenger) {
+        await t.rollback();
+        return res.status(404).json({ status: 404, success: false, message: 'Passenger account could not be verified for wallet payment' });
+      }
+      if (walletPassenger.status === 'Inactive' || walletPassenger.block_status === 'Block') {
+        await t.rollback();
+        return res.status(403).json({ status: 403, success: false, message: 'Passenger account is not active' });
+      }
+      const currentBalance = Number(walletPassenger.wallet_balance || 0);
+      if (currentBalance < final_amount) {
+        await t.rollback();
+        return res.status(409).json({
+          status: 409,
+          success: false,
+          message: 'Insufficient wallet balance',
+          data: { required_amount: final_amount, wallet_balance: currentBalance },
+        });
+      }
+      walletBalanceAfter = Math.round((currentBalance - final_amount) * 100) / 100;
+      await walletPassenger.update({ wallet_balance: walletBalanceAfter }, { transaction: t });
+    }
+
     const booking_reference = `BK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const boarding_pass_code = `BP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const boarding_pin = Math.floor(1000 + Math.random() * 9000).toString();
@@ -1492,15 +1531,39 @@ exports.createBooking = async (req, res, next) => {
       total_fare,
       discount_amount,
       final_amount,
-      payment_method: payment_method || 'cash',
+      payment_method: walletPaymentRequested ? 'wallet' : (payment_method || 'cash'),
       coupon_id: coupon_id || null,
       special_requests: special_requests || null,
       boarding_pass_code,
       boarding_pin,
       booking_status: 'confirmed',
-      payment_status: 'pending',
+      payment_status: walletPaymentRequested ? 'paid' : 'pending',
       qr_token: uuidv4(),
     }, { transaction: t });
+
+    if (walletPaymentRequested) {
+      await WalletTransaction.create({
+        passenger_id: walletPassenger.id,
+        type: 'debit',
+        amount: final_amount,
+        balance_after: walletBalanceAfter,
+        source: 'booking',
+        reference_type: 'booking',
+        reference_id: String(booking.id),
+        description: `Wallet payment for booking ${booking_reference}`,
+      }, { transaction: t });
+      await Payment.create({
+        booking_id: booking.id,
+        passenger_id: walletPassenger.id,
+        amount: final_amount,
+        currency: 'INR',
+        payment_method: 'wallet',
+        payment_gateway: 'wallet',
+        status: 'captured',
+        event: 'wallet_payment_captured',
+        payload: { booking_reference },
+      }, { transaction: t });
+    }
 
     await trip.increment('booked_seats', { by: numSeats, transaction: t });
 
@@ -1509,10 +1572,11 @@ exports.createBooking = async (req, res, next) => {
     res.status(201).json({
       status: 201,
       success: true,
-      message: 'Booking created successfully',
+      message: walletPaymentRequested ? 'Booking created and paid from wallet' : 'Booking created successfully',
       data: {
         booking_id: booking.id,
-        ...bookingData
+        ...bookingData,
+        ...(walletPaymentRequested ? { wallet_balance: walletBalanceAfter } : {}),
       }
     });
   } catch (err) {

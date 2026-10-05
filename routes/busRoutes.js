@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const busController = require('../controllers/busController');
 const payuController = require('../controllers/payuController');
+const walletController = require('../controllers/walletController');
 
 // ── Public Bus APIs (No Authentication Required) ───────────
 // These are for user-facing mobile app
@@ -35,6 +36,8 @@ router.get('/calculate-fare', busController.calculateFare);
 router.post('/calculate-fare', busController.calculateFare);
 
 // User Bookings (Can be made public with passenger_mobile)
+router.post('/wallet/balance', walletController.balance);
+router.post('/wallet/transactions', walletController.transactions);
 router.get('/user-bookings', busController.getUserBookings);
 router.post('/user-bookings', busController.getUserBookings);
 
