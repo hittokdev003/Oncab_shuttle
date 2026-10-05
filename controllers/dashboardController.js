@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op, fn, col, literal } = require('sequelize');
-const { Booking, Trip, Driver, Vehicle, Passenger, Payment, Refund, Route, AuditLog } = require('../models');
+const { Booking, Trip, Driver, Vehicle, Passenger, CustomerUser, Payment, Refund, Route, AuditLog } = require('../models');
 const sequelize = require('../config/database');
 
 // ── Dashboard Stats ────────────────────────────────────────
@@ -101,7 +101,7 @@ exports.stats = async (req, res, next) => {
       order: [['created_at', 'DESC']],
       include: [
         { model: Trip, as: 'trip', attributes: ['id', 'schedule_code'] },
-        { model: Passenger, as: 'passenger', attributes: ['id', 'name', 'mobile'] },
+        { model: CustomerUser, as: 'passenger', attributes: ['id', 'name', 'mobile'] },
       ],
     });
 

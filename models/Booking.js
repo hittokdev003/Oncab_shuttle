@@ -7,7 +7,7 @@ const Booking = sequelize.define('Booking', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
   booking_reference: { type: DataTypes.STRING(30), allowNull: false, unique: true },
   trip_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
-  passenger_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },
+  passenger_id: { type: DataTypes.BIGINT.UNSIGNED, defaultValue: null },
   origin_stop_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },
   destination_stop_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },
   coupon_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },

@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Refund, Booking, Payment, Passenger, WalletTransaction, sequelize } = require('../models');
+const { Refund, Booking, Payment, CustomerUser, WalletTransaction, sequelize } = require('../models');
 const { logAction } = require('../middleware/auditLog');
 const { checkRefundStatus } = require('../utils/payu');
 
@@ -13,7 +13,7 @@ const buildPagination = (page, limit) => {
 
 const REFUND_INCLUDE = [
   { model: Booking, as: 'booking', attributes: ['id', 'booking_reference', 'passenger_name', 'travel_date'] },
-  { model: Passenger, as: 'passenger', attributes: ['id', 'name', 'mobile', 'email'] },
+  { model: CustomerUser, as: 'passenger', attributes: ['id', 'name', 'mobile', 'email'] },
   { model: Payment, as: 'payment', attributes: ['id', 'payment_gateway', 'payu_txnid', 'payu_mihpayid', 'amount', 'status'] },
 ];
 
@@ -81,7 +81,7 @@ exports.process = async (req, res, next) => {
     const booking = await Booking.findByPk(refund.booking_id, { transaction });
     const passengerId = refund.passenger_id || booking?.passenger_id;
     const passenger = passengerId
-      ? await Passenger.findByPk(passengerId, { transaction, lock: transaction.LOCK.UPDATE })
+      ? await CustomerUser.findByPk(passengerId, { transaction, lock: transaction.LOCK.UPDATE })
       : null;
     if (!passenger) {
       await transaction.rollback();

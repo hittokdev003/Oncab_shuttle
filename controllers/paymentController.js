@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Payment, Booking, Passenger } = require('../models');
+const { Payment, Booking, CustomerUser } = require('../models');
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -22,7 +22,7 @@ exports.list = async (req, res, next) => {
       where,
       include: [
         { model: Booking, as: 'booking', attributes: ['id', 'booking_reference', 'passenger_name'] },
-        { model: Passenger, as: 'passenger', attributes: ['id', 'name', 'mobile'] },
+        { model: CustomerUser, as: 'passenger', attributes: ['id', 'name', 'mobile'] },
       ],
       offset, limit: lim,
       order: [['created_at', 'DESC']],
@@ -36,7 +36,7 @@ exports.show = async (req, res, next) => {
     const payment = await Payment.findByPk(req.params.id, {
       include: [
         { model: Booking, as: 'booking' },
-        { model: Passenger, as: 'passenger' },
+        { model: CustomerUser, as: 'passenger' },
       ],
     });
     if (!payment) return res.status(404).json({ success: false, message: 'Payment not found' });
