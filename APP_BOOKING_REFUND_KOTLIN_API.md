@@ -4,6 +4,8 @@ Base API URL (development): `https://oncab.in/bus-operator-dev/api2`
 
 All request examples use JSON. Set `Content-Type: application/json` for POST requests. Public bus endpoints do not currently require an Authorization header.
 
+Before deploying coupon usage tracking, apply `migrations/coupon_usage_limits.sql` and `migrations/coupon_seat_limit.sql` once to the database.
+
 > Wallet and public booking endpoints currently identify passengers with `passenger_id` and registered `passenger_mobile`; this is not a substitute for verified passenger authentication. Do not treat the mobile number alone as secure proof of account ownership.
 
 ## Booking Flow
@@ -33,7 +35,8 @@ All request examples use JSON. Set `Content-Type: application/json` for POST req
   "seat_numbers": ["A1", "A2"],
   "total_seats": 2,
   "payment_method": "wallet",
-  "coupon_id": null,
+  "coupon_code": "WELCOME20",
+  "device_id": "app-installation-id",
   "special_requests": null
 }
 ```
@@ -84,6 +87,14 @@ If `PAYU_RETURN_URL` is configured, PayU returns the user to that URL with resul
 
 ### Fare calculation
 
+### Fetch available coupons (public, no authentication)
+
+`GET /bus/coupons`
+
+Optional query parameters: `passenger_id`, `device_id`, `amount`, and `seat_count`. Pass the passenger and stable app-installation device IDs to hide coupons whose per-user or per-device limit that customer has reached. Pass `amount` and `seat_count` to also hide coupons that fail the minimum-fare or maximum-seats conditions. Without user/device IDs the endpoint cannot personalize usage limits.
+
+The response `data` array contains only active, in-date coupons that have remaining global uses and pass any supplied filters.
+
 `POST /bus/calculate-fare`
 
 ```json
@@ -91,11 +102,14 @@ If `PAYU_RETURN_URL` is configured, PayU returns the user to that URL with resul
   "schedule_id": 42,
   "origin_stop_id": 5,
   "destination_stop_id": 12,
-  "seat_count": 2
+  "seat_count": 2,
+  "coupon_code": "WELCOME20",
+  "passenger_id": 123,
+  "device_id": "app-installation-id"
 }
 ```
 
-Success data includes `fare_per_seat`, `total_fare`, `currency`, and the resolved rate source. The booking endpoint recalculates the fare server-side; never use a client-calculated amount as the amount to charge.
+Coupon fields are optional. Send `coupon_code` (or `coupon_id`) and the same `passenger_id` and stable app-installation `device_id` to preview user/device limits. Success data includes `total_fare`, `discount_amount`, `final_amount`, `currency`, and the resolved rate source. The booking endpoint rechecks eligibility and records usage transactionally; never use a client-calculated amount as the amount to charge. Invalid or exhausted coupons return HTTP `400` with a reason in `message`.
 
 ### Read bookings
 

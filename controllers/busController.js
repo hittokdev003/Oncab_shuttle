@@ -2,9 +2,10 @@
 
 const { Op, fn, col } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
-const { BusType, BusRoute, BusSchedule, BusStop, Trip, Booking, Vehicle, Stop, Route, BusDriverAssignment, CustomerUser, Coupon, RateChart, Driver, DriverDetail, Payment, WalletTransaction } = require('../models');
+const { BusType, BusRoute, BusSchedule, BusStop, Trip, Booking, Vehicle, Stop, Route, BusDriverAssignment, CustomerUser, Coupon, CouponUsage, RateChart, Driver, DriverDetail, Payment, WalletTransaction } = require('../models');
 const sequelize = require('../config/database');
 const { resolveFare } = require('../utils/fareCalculator');
+const { calculateCouponDiscount } = require('../utils/coupon');
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -1037,6 +1038,10 @@ exports.calculateFare = async (req, res, next) => {
     const destination_stop_id = query.destination_stop_id || body.destination_stop_id;
     const rawSeatCount = query.seat_count || body.seat_count || 1;
     const seat_count = Number(rawSeatCount);
+    const coupon_id = query.coupon_id || body.coupon_id;
+    const coupon_code = query.coupon_code || body.coupon_code;
+    const passenger_id = query.passenger_id || body.passenger_id;
+    const device_id = query.device_id || body.device_id;
     if (!Number.isInteger(seat_count) || seat_count < 1) {
       return res.status(400).json({ status: 400, success: false, message: 'seat_count must be a positive integer' });
     }
@@ -1054,7 +1059,7 @@ exports.calculateFare = async (req, res, next) => {
     let schedule = await BusSchedule.findByPk(schedule_id, {
       include: [
         { model: Route, as: 'main_route', required: false },
-        { model: BusRoute, as: 'route', required: false },
+        { model: Route, as: 'route', required: false },
         { model: BusType, as: 'bus_type', required: false },
       ],
     });
@@ -1093,7 +1098,23 @@ exports.calculateFare = async (req, res, next) => {
     if (fareResult.error) return res.status(400).json({ status: 400, success: false, message: fareResult.error });
 
     const farePerSeat = fareResult.fare;
-    const finalAmount = farePerSeat * seat_count;
+    const totalAmount = farePerSeat * seat_count;
+    let discountAmount = 0;
+    let appliedCoupon = null;
+    if (coupon_id || coupon_code) {
+      const couponResult = await calculateCouponDiscount({
+        couponId: coupon_id,
+        couponCode: coupon_code,
+        amount: totalAmount,
+        seatCount: seat_count,
+        passengerId: passenger_id,
+        deviceId: device_id,
+      });
+      if (couponResult.error) return res.status(400).json({ status: 400, success: false, message: couponResult.error });
+      appliedCoupon = couponResult.coupon;
+      discountAmount = couponResult.discount;
+    }
+    const finalAmount = Math.max(0, totalAmount - discountAmount);
 
     res.json({
       status: 200,
@@ -1108,7 +1129,10 @@ exports.calculateFare = async (req, res, next) => {
         base_fare: farePerSeat,
         seat_count,
         fare_per_seat: farePerSeat,
-        total_fare: finalAmount,
+        total_fare: totalAmount,
+        discount_amount: discountAmount,
+        final_amount: finalAmount,
+        coupon: appliedCoupon ? { id: appliedCoupon.id, code: appliedCoupon.code } : null,
         rate_source: fareResult.source,
         currency: 'INR',
       },
@@ -1439,6 +1463,8 @@ exports.createBooking = async (req, res, next) => {
       payment_method,
       use_wallet,
       coupon_id,
+      coupon_code,
+      device_id,
       special_requests
     } = body;
 
@@ -1527,14 +1553,26 @@ exports.createBooking = async (req, res, next) => {
 
     let total_fare = fareResult.fare * numSeats;
     let discount_amount = 0;
+    let appliedCoupon = null;
 
-    if (coupon_id) {
-      const coupon = await Coupon.findByPk(coupon_id, { transaction: t });
-      if (coupon && coupon.status === 'Active') {
-        if (coupon.code_type === 'FLAT') discount_amount = Math.min(coupon.amount, total_fare);
-        else discount_amount = Math.min((total_fare * coupon.amount) / 100, coupon.max_discount || Infinity);
-        await coupon.increment('used_count', { transaction: t });
+    if (coupon_id || coupon_code) {
+      const couponResult = await calculateCouponDiscount({
+        couponId: coupon_id,
+        couponCode: coupon_code,
+        amount: total_fare,
+        seatCount: numSeats,
+        passengerId: passengerUser.id,
+        deviceId: device_id,
+        transaction: t,
+        lock: true,
+      });
+      if (couponResult.error) {
+        await t.rollback();
+        return res.status(400).json({ status: 400, success: false, message: couponResult.error });
       }
+      appliedCoupon = couponResult.coupon;
+      discount_amount = couponResult.discount;
+      await appliedCoupon.increment('used_count', { by: 1, transaction: t });
     }
 
     const final_amount = Math.max(0, total_fare - discount_amount);
@@ -1575,7 +1613,7 @@ exports.createBooking = async (req, res, next) => {
       discount_amount,
       final_amount,
       payment_method: walletPaymentRequested ? 'wallet' : (payment_method || 'cash'),
-      coupon_id: coupon_id || null,
+      coupon_id: appliedCoupon?.id || null,
       special_requests: special_requests || null,
       boarding_pass_code,
       boarding_pin,
@@ -1583,6 +1621,16 @@ exports.createBooking = async (req, res, next) => {
       payment_status: walletPaymentRequested ? 'paid' : 'pending',
       qr_token: uuidv4(),
     }, { transaction: t });
+
+    if (appliedCoupon) {
+      await CouponUsage.create({
+        coupon_id: appliedCoupon.id,
+        booking_id: booking.id,
+        passenger_id: passengerUser.id,
+        device_id: device_id ? String(device_id).trim() : null,
+        discount_amount,
+      }, { transaction: t });
+    }
 
     if (walletPaymentRequested) {
       await WalletTransaction.create({

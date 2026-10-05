@@ -1,0 +1,196 @@
+{
+  "info": {
+    "_postman_id": "9be8d4c9-06a6-4d65-9f3a-7e8f1809fc6d",
+    "name": "Oncab Shuttle - Coupons and Fare Tests",
+    "description": "Tests admin coupon management, coupon validation, fare preview, booking redemption, redemption history, and per-user rejection. Apply migrations/coupon_usage_limits.sql before running against a database. The booking request creates a real booking and consumes usage.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000/api2", "type": "string" },
+    { "key": "adminEmail", "value": "", "type": "string" },
+    { "key": "adminPassword", "value": "", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "testCouponCode", "value": "", "type": "string" },
+    { "key": "couponId", "value": "", "type": "string" },
+    { "key": "fareAmount", "value": "500", "type": "string" },
+    { "key": "scheduleId", "value": "", "type": "string" },
+    { "key": "tripId", "value": "", "type": "string" },
+    { "key": "originStopId", "value": "", "type": "string" },
+    { "key": "destinationStopId", "value": "", "type": "string" },
+    { "key": "passengerId", "value": "", "type": "string" },
+    { "key": "passengerName", "value": "Postman Coupon Tester", "type": "string" },
+    { "key": "passengerMobile", "value": "", "type": "string" },
+    { "key": "passengerEmail", "value": "", "type": "string" },
+    { "key": "deviceId", "value": "postman-device-01", "type": "string" },
+    { "key": "travelDate", "value": "", "type": "string" },
+    { "key": "bookingId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Admin login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/auth/login"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Login succeeds', function () { pm.response.to.have.status(200); });",
+            "const json = pm.response.json();",
+            "pm.expect(json.success).to.eql(true);",
+            "pm.expect(json.data.accessToken).to.be.a('string').and.not.empty;",
+            "pm.collectionVariables.set('accessToken', json.data.accessToken);"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "2. Create percentage coupon",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"code\": \"{{testCouponCode}}\",\n  \"code_type\": \"PERCENTAGE\",\n  \"amount\": 10,\n  \"max_discount\": 200,\n  \"min_amount\": 100,\n  \"usage_limit\": 10,\n  \"per_user_limit\": 1,\n  \"per_device_limit\": 1,\n  \"start_date\": null,\n  \"end_date\": null,\n  \"description\": \"Postman coupon flow test\",\n  \"status\": \"Active\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/coupons"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const code = 'PM' + Date.now().toString().slice(-8);",
+              "pm.collectionVariables.set('testCouponCode', code);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Coupon created', function () { pm.response.to.have.status(201); });",
+              "const json = pm.response.json();",
+              "pm.expect(json.success).to.eql(true);",
+              "pm.expect(json.data.code_type).to.eql('PERCENTAGE');",
+              "pm.collectionVariables.set('couponId', String(json.data.id));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. List coupons",
+      "request": { "method": "GET", "url": "{{baseUrl}}/coupons?search={{testCouponCode}}" },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Coupon list succeeds', function () { pm.response.to.have.status(200); });",
+          "const json = pm.response.json();",
+          "pm.expect(json.data.some((coupon) => coupon.id === Number(pm.collectionVariables.get('couponId')))).to.eql(true);"
+        ] }
+      }]
+    },
+    {
+      "name": "4. Validate coupon",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"code\": \"{{testCouponCode}}\",\n  \"amount\": {{fareAmount}},\n  \"passenger_id\": {{passengerId}},\n  \"device_id\": \"{{deviceId}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/coupons/validate"
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Coupon is valid', function () { pm.response.to.have.status(200); });",
+          "const json = pm.response.json();",
+          "pm.expect(json.data.discount).to.eql('50.00');",
+          "pm.expect(Number(json.data.final_amount)).to.eql(450);"
+        ] }
+      }]
+    },
+    {
+      "name": "5. Calculate fare with coupon",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"schedule_id\": {{scheduleId}},\n  \"origin_stop_id\": {{originStopId}},\n  \"destination_stop_id\": {{destinationStopId}},\n  \"seat_count\": 1,\n  \"coupon_code\": \"{{testCouponCode}}\",\n  \"passenger_id\": {{passengerId}},\n  \"device_id\": \"{{deviceId}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/bus/calculate-fare"
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Fare calculation succeeds', function () { pm.response.to.have.status(200); });",
+          "const json = pm.response.json();",
+          "pm.expect(json.data.coupon.code).to.eql(pm.collectionVariables.get('testCouponCode'));",
+          "pm.expect(Number(json.data.discount_amount)).to.be.greaterThan(0);",
+          "pm.expect(Number(json.data.final_amount)).to.eql(Number(json.data.total_fare) - Number(json.data.discount_amount));"
+        ] }
+      }]
+    },
+    {
+      "name": "6. Create booking and redeem coupon (creates booking)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"trip_id\": {{tripId}},\n  \"passenger_id\": {{passengerId}},\n  \"passenger_name\": \"{{passengerName}}\",\n  \"passenger_mobile\": \"{{passengerMobile}}\",\n  \"passenger_email\": \"{{passengerEmail}}\",\n  \"origin_stop_id\": {{originStopId}},\n  \"destination_stop_id\": {{destinationStopId}},\n  \"travel_date\": \"{{travelDate}}\",\n  \"seat_numbers\": [\"{{seatNumber}}\"],\n  \"total_seats\": 1,\n  \"payment_method\": \"payu\",\n  \"coupon_code\": \"{{testCouponCode}}\",\n  \"device_id\": \"{{deviceId}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/bus/create-booking"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": { "type": "text/javascript", "exec": [
+            "if (!pm.collectionVariables.get('travelDate')) { pm.collectionVariables.set('travelDate', new Date(Date.now() + 86400000).toISOString().slice(0, 10)); }",
+            "if (!pm.collectionVariables.get('seatNumber')) { pm.collectionVariables.set('seatNumber', 'PM-' + Date.now().toString().slice(-5)); }"
+          ] }
+        },
+        {
+          "listen": "test",
+          "script": { "type": "text/javascript", "exec": [
+            "pm.test('Booking created', function () { pm.response.to.have.status(201); });",
+            "const json = pm.response.json();",
+            "pm.expect(Number(json.data.discount_amount)).to.be.greaterThan(0);",
+            "pm.collectionVariables.set('bookingId', String(json.data.id || json.data.booking_id));"
+          ] }
+        }
+      ]
+    },
+    {
+      "name": "7. Confirm usage history",
+      "request": { "method": "GET", "url": "{{baseUrl}}/coupons/{{couponId}}/usages?page=1&limit=15" },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Usage history contains the booking', function () { pm.response.to.have.status(200); });",
+          "const json = pm.response.json();",
+          "pm.expect(json.data.length).to.be.greaterThan(0);",
+          "pm.expect(String(json.data[0].passenger_id)).to.eql(String(pm.collectionVariables.get('passengerId')));",
+          "pm.expect(json.data[0].device_id).to.eql(pm.collectionVariables.get('deviceId'));"
+        ] }
+      }]
+    },
+    {
+      "name": "8. Reject second use by same user/device",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"code\": \"{{testCouponCode}}\",\n  \"amount\": {{fareAmount}},\n  \"passenger_id\": {{passengerId}},\n  \"device_id\": \"{{deviceId}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/coupons/validate"
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Repeat use is rejected', function () { pm.response.to.have.status(400); });",
+          "pm.expect(pm.response.json().message).to.include('limit');"
+        ] }
+      }]
+    }
+  ]
+}
