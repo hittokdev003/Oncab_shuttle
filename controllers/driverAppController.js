@@ -387,7 +387,6 @@ exports.getPassengerManifest = async (req, res, next) => {
       destination_stop: b.destination_stop ? b.destination_stop.stop_name : 'Destination Station',
       boarding_status: b.boarding_status,
       boarding_pass_code: b.boarding_pass_code,
-      boarding_pin: b.boarding_pin,
       boarded_at: b.boarded_at,
       payment_status: b.payment_status,
     }));
@@ -496,7 +495,7 @@ exports.completeTrip = async (req, res, next) => {
  */
 exports.scanBoardingPass = async (req, res, next) => {
   try {
-    const { trip_id, assignment_id, boarding_pass_code } = req.body || {};
+    const { trip_id, assignment_id, stop_id, boarding_pass_code } = req.body || {};
     const targetTripId = trip_id || assignment_id;
 
     if (!boarding_pass_code) {
@@ -530,7 +529,21 @@ exports.scanBoardingPass = async (req, res, next) => {
       });
     }
 
-    // Validation 2: Check Boarding Status
+    // Validation 2: Stop Level Matching (if current stop_id provided)
+    if (stop_id && booking.origin_stop_id && parseInt(booking.origin_stop_id) !== parseInt(stop_id)) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: `Passenger pickup is at a different stop (${booking.origin_stop ? booking.origin_stop.stop_name : 'another stop'})`,
+        data: {
+          booking_id: booking.id,
+          expected_stop_id: booking.origin_stop_id,
+          expected_stop_name: booking.origin_stop ? booking.origin_stop.stop_name : null,
+        },
+      });
+    }
+
+    // Validation 3: Check Boarding Status
     if (booking.boarding_status === 'boarded') {
       return res.status(400).json({
         status: 400,
@@ -555,7 +568,9 @@ exports.scanBoardingPass = async (req, res, next) => {
         passenger_name: booking.passenger_name,
         passenger_mobile_masked: maskMobile(booking.passenger_mobile),
         seat_numbers: booking.seat_numbers,
+        origin_stop_id: booking.origin_stop_id,
         origin: booking.origin_stop ? booking.origin_stop.stop_name : 'Origin',
+        destination_stop_id: booking.destination_stop_id,
         destination: booking.destination_stop ? booking.destination_stop.stop_name : 'Destination',
         boarding_pin_required: true,
         boarding_status: booking.boarding_status,
@@ -572,7 +587,7 @@ exports.scanBoardingPass = async (req, res, next) => {
  */
 exports.confirmBoarding = async (req, res, next) => {
   try {
-    const { booking_id, boarding_pin } = req.body || {};
+    const { booking_id, trip_id, stop_id, boarding_pin } = req.body || {};
 
     if (!booking_id || !boarding_pin) {
       return res.status(400).json({
@@ -587,6 +602,14 @@ exports.confirmBoarding = async (req, res, next) => {
       return res.status(404).json({ status: 404, success: false, message: 'Booking not found' });
     }
 
+    if (trip_id && parseInt(booking.trip_id) !== parseInt(trip_id)) {
+      return res.status(400).json({ status: 400, success: false, message: 'Booking does not match specified trip' });
+    }
+
+    if (stop_id && booking.origin_stop_id && parseInt(booking.origin_stop_id) !== parseInt(stop_id)) {
+      return res.status(400).json({ status: 400, success: false, message: 'Booking pickup stop does not match specified stop' });
+    }
+
     if (booking.boarding_status === 'boarded') {
       return res.status(400).json({
         status: 400,
@@ -599,8 +622,8 @@ exports.confirmBoarding = async (req, res, next) => {
       });
     }
 
-    // Check PIN match (or master override PIN '9999' in emergency)
-    if (booking.boarding_pin && booking.boarding_pin !== boarding_pin && boarding_pin !== '9999') {
+    // Strict PIN verification (universal 9999 override removed for security)
+    if (booking.boarding_pin && booking.boarding_pin !== String(boarding_pin).trim()) {
       return res.status(400).json({
         status: 400,
         success: false,
@@ -841,6 +864,344 @@ exports.getEarningsSummary = async (req, res, next) => {
         total_passengers_boarded: totalPassengersBoarded,
         rating: 4.8, // Default rating representation
         duty_status: req.driver.online_status,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── 6. CITYFLO-STYLE STOP-BY-STOP OPERATIONS ─────────────────────
+
+/**
+ * Driver Home Summary
+ * GET /api/bus-driver/home
+ */
+exports.getDriverHome = async (req, res, next) => {
+  try {
+    const driverId = req.driver.id;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const activeTrip = await Trip.findOne({
+      where: {
+        driver_id: driverId,
+        status: { [Op.in]: ['Active', 'Scheduled'] },
+      },
+      include: [
+        { model: Route, as: 'route', include: [{ model: Stop, as: 'stops' }] },
+        { model: Vehicle, as: 'vehicle', include: [{ model: BusType, as: 'bus_type' }] },
+        { model: Booking, as: 'bookings', where: { booking_status: 'confirmed' }, required: false },
+      ],
+      order: [['status', 'ASC'], ['departure_time', 'ASC']],
+    });
+
+    if (!activeTrip) {
+      return res.json({
+        status: 200,
+        success: true,
+        data: {
+          driver: { id: req.driver.id, name: req.driver.name, online_status: req.driver.online_status },
+          today: { date: today },
+          current_trip: null,
+          current_stop: null,
+          next_stop: null,
+          boarding: { total: 0, boarded: 0, pending: 0 },
+        },
+      });
+    }
+
+    const bookings = activeTrip.bookings || [];
+    const totalBookings = bookings.length;
+    const boardedCount = bookings.filter((b) => b.boarding_status === 'boarded').length;
+    const pendingCount = bookings.filter((b) => b.boarding_status === 'not_boarded').length;
+
+    const stops = activeTrip.route?.stops || [];
+    const currentStop = stops.length > 0 ? stops[0] : null;
+    const nextStop = stops.length > 1 ? stops[1] : null;
+
+    res.json({
+      status: 200,
+      success: true,
+      data: {
+        driver: {
+          id: req.driver.id,
+          name: req.driver.name,
+          online_status: req.driver.online_status,
+        },
+        today: { date: today },
+        current_trip: {
+          trip_id: activeTrip.id,
+          schedule_code: activeTrip.schedule_code,
+          status: activeTrip.status,
+          bus_number: activeTrip.vehicle?.registration_number || activeTrip.vehicle?.vehicle_number || 'TBD',
+          route_name: activeTrip.route?.route_name,
+          departure_time: activeTrip.departure_time,
+          trip_date: activeTrip.trip_date,
+        },
+        current_stop: currentStop ? {
+          stop_id: currentStop.id,
+          name: currentStop.stop_name,
+          sequence: currentStop.stop_sequence || 1,
+          eta: currentStop.pickup_time || activeTrip.departure_time,
+        } : null,
+        next_stop: nextStop ? {
+          stop_id: nextStop.id,
+          name: nextStop.stop_name,
+          sequence: nextStop.stop_sequence || 2,
+        } : null,
+        boarding: {
+          total: totalBookings,
+          boarded: boardedCount,
+          pending: pendingCount,
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get Current Stop Info
+ * GET /api/bus-driver/trips/:id/current-stop
+ */
+exports.getCurrentStop = async (req, res, next) => {
+  try {
+    const trip = await Trip.findOne({
+      where: { id: req.params.id, driver_id: req.driver.id },
+      include: [
+        { model: Route, as: 'route', include: [{ model: Stop, as: 'stops' }] },
+        { model: Booking, as: 'bookings', where: { booking_status: 'confirmed' }, required: false },
+      ],
+    });
+
+    if (!trip) {
+      return res.status(404).json({ status: 404, success: false, message: 'Trip assignment not found' });
+    }
+
+    const stops = trip.route?.stops || [];
+    const bookings = trip.bookings || [];
+
+    // Identify current active stop by first stop with pending boardings
+    let activeStop = stops[0] || null;
+    for (const s of stops) {
+      const stopPending = bookings.filter((b) => Number(b.origin_stop_id) === Number(s.id) && b.boarding_status === 'not_boarded').length;
+      if (stopPending > 0) {
+        activeStop = s;
+        break;
+      }
+    }
+
+    const stopBookings = activeStop ? bookings.filter((b) => Number(b.origin_stop_id) === Number(activeStop.id)) : [];
+    const stopBoarded = stopBookings.filter((b) => b.boarding_status === 'boarded').length;
+
+    res.json({
+      status: 200,
+      success: true,
+      data: {
+        trip_id: trip.id,
+        stop: activeStop ? {
+          id: activeStop.id,
+          name: activeStop.stop_name,
+          sequence: activeStop.stop_sequence || 1,
+          latitude: activeStop.latitude,
+          longitude: activeStop.longitude,
+          scheduled_time: activeStop.pickup_time || trip.departure_time,
+          eta: activeStop.pickup_time || trip.departure_time,
+        } : null,
+        passengers: {
+          total: stopBookings.length,
+          boarded: stopBoarded,
+          pending: stopBookings.length - stopBoarded,
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Arrive at Stop
+ * POST /api/bus-driver/trips/:id/stops/:stopId/arrive
+ */
+exports.arriveAtStop = async (req, res, next) => {
+  try {
+    const { id: tripId, stopId } = req.params;
+    const { latitude, longitude } = req.body || {};
+
+    const trip = await Trip.findOne({ where: { id: tripId, driver_id: req.driver.id } });
+    if (!trip) {
+      return res.status(404).json({ status: 404, success: false, message: 'Trip assignment not found' });
+    }
+
+    const stop = await Stop.findByPk(stopId);
+    if (!stop) {
+      return res.status(404).json({ status: 404, success: false, message: 'Stop not found' });
+    }
+
+    const now = new Date();
+
+    res.json({
+      status: 200,
+      success: true,
+      message: `Arrived at stop ${stop.stop_name}`,
+      data: {
+        trip_id: trip.id,
+        stop_id: stop.id,
+        stop_name: stop.stop_name,
+        arrived_at: now,
+        arrival_latitude: latitude || null,
+        arrival_longitude: longitude || null,
+        status: 'ARRIVED',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get Passengers for Current Stop
+ * GET /api/bus-driver/trips/:id/stops/:stopId/passengers
+ */
+exports.getStopPassengers = async (req, res, next) => {
+  try {
+    const { id: tripId, stopId } = req.params;
+
+    const trip = await Trip.findOne({ where: { id: tripId, driver_id: req.driver.id } });
+    if (!trip) {
+      return res.status(404).json({ status: 404, success: false, message: 'Trip assignment not found' });
+    }
+
+    const stop = await Stop.findByPk(stopId);
+    const bookings = await Booking.findAll({
+      where: {
+        trip_id: tripId,
+        origin_stop_id: stopId,
+        booking_status: 'confirmed',
+      },
+      order: [['id', 'ASC']],
+    });
+
+    const passengers = bookings.map((b) => ({
+      booking_id: b.id,
+      booking_reference: b.booking_reference,
+      passenger_name: b.passenger_name,
+      passenger_mobile_masked: maskMobile(b.passenger_mobile),
+      seat: Array.isArray(b.seat_numbers) ? b.seat_numbers.join(', ') : b.seat_numbers,
+      boarding_status: b.boarding_status,
+      boarding_pass_code: b.boarding_pass_code,
+      boarded_at: b.boarded_at,
+    }));
+
+    const total = bookings.length;
+    const boarded = bookings.filter((b) => b.boarding_status === 'boarded').length;
+
+    res.json({
+      status: 200,
+      success: true,
+      data: {
+        stop: {
+          id: Number(stopId),
+          name: stop ? stop.stop_name : 'Pickup Stop',
+        },
+        summary: {
+          total,
+          boarded,
+          pending: total - boarded,
+          no_show: bookings.filter((b) => b.boarding_status === 'no_show').length,
+        },
+        passengers,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Complete Stop Operations
+ * POST /api/bus-driver/trips/:id/stops/:stopId/complete
+ */
+exports.completeStop = async (req, res, next) => {
+  try {
+    const { id: tripId, stopId } = req.params;
+    const { latitude, longitude } = req.body || {};
+
+    const trip = await Trip.findOne({
+      where: { id: tripId, driver_id: req.driver.id },
+      include: [{ model: Route, as: 'route', include: [{ model: Stop, as: 'stops' }] }],
+    });
+    if (!trip) {
+      return res.status(404).json({ status: 404, success: false, message: 'Trip assignment not found' });
+    }
+
+    const bookings = await Booking.findAll({ where: { trip_id: tripId, origin_stop_id: stopId } });
+    const total = bookings.length;
+    const boarded = bookings.filter((b) => b.boarding_status === 'boarded').length;
+    const noShow = bookings.filter((b) => b.boarding_status === 'no_show').length;
+
+    const stops = trip.route?.stops || [];
+    const currentIndex = stops.findIndex((s) => Number(s.id) === Number(stopId));
+    const nextStop = currentIndex >= 0 && currentIndex + 1 < stops.length ? stops[currentIndex + 1] : null;
+
+    res.json({
+      status: 200,
+      success: true,
+      message: 'Stop completed successfully',
+      data: {
+        stop_id: Number(stopId),
+        total_passengers: total,
+        boarded,
+        no_show: noShow,
+        completed_at: new Date(),
+        next_stop: nextStop ? {
+          stop_id: nextStop.id,
+          name: nextStop.stop_name,
+          sequence: nextStop.stop_sequence,
+        } : null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Mark Passenger No-Show at Stop
+ * POST /api/bus-driver/trips/:id/stops/:stopId/mark-no-show
+ */
+exports.markNoShow = async (req, res, next) => {
+  try {
+    const { booking_id, reason } = req.body || {};
+    if (!booking_id) {
+      return res.status(400).json({ status: 400, success: false, message: 'booking_id is required' });
+    }
+
+    const booking = await Booking.findOne({ where: { id: booking_id, trip_id: req.params.id } });
+    if (!booking) {
+      return res.status(404).json({ status: 404, success: false, message: 'Booking not found for this trip' });
+    }
+
+    if (booking.boarding_status === 'boarded') {
+      return res.status(400).json({ status: 400, success: false, message: 'Passenger has already boarded' });
+    }
+
+    await booking.update({
+      boarding_status: 'no_show',
+      cancellation_reason: reason || 'Passenger did not arrive at stop',
+    });
+
+    res.json({
+      status: 200,
+      success: true,
+      message: 'Passenger marked as no-show',
+      data: {
+        booking_id: booking.id,
+        booking_reference: booking.booking_reference,
+        passenger_name: booking.passenger_name,
+        boarding_status: booking.boarding_status,
       },
     });
   } catch (err) {

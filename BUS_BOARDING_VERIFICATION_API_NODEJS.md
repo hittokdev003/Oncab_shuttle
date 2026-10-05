@@ -7,27 +7,32 @@ This document describes the complete boarding verification flow using QR code an
 ## Architecture Flow
 
 ```
-USER BOOKS SEAT
+DRIVER LOGIN
       ↓
-Booking created
+DRIVER HOME (/api2/bus-driver/home)
       ↓
-Generate QR + PIN (Backend)
+TODAY'S ASSIGNED TRIP & ROUTE STOPS
       ↓
-User sees QR / PIN in app
+START TRIP (/api2/bus-driver/trips/:id/start)
       ↓
-Driver starts trip
+NAVIGATE TO CURRENT STOP (/api2/bus-driver/trips/:id/current-stop)
       ↓
-Driver scans user's QR
+ARRIVE AT STOP (/api2/bus-driver/trips/:id/stops/:stopId/arrive)
       ↓
-Backend validates QR
+GET STOP PASSENGER LIST (/api2/bus-driver/trips/:id/stops/:stopId/passengers)
       ↓
-Backend returns booking/passenger/seat
+DRIVER SCANS PASSENGER QR (/api2/bus-driver/scan-boarding-pass)
+  [Validates: Correct Trip + Correct Stop + Unboarded Status]
       ↓
-Driver enters PIN
+PASSENGER REVEALS PIN → DRIVER ENTERS PIN (/api2/bus-driver/confirm-boarding)
       ↓
-Driver confirms boarding
+PASSENGER MARKED "BOARDED" (or MARKED NO-SHOW AT STOP)
       ↓
-Booking marked "boarded"
+COMPLETE STOP (/api2/bus-driver/trips/:id/stops/:stopId/complete)
+      ↓
+NAVIGATE TO NEXT STOP ... REPEAT UNTIL FINAL DROP
+      ↓
+COMPLETE TRIP (/api2/bus-driver/trips/:id/complete)
 ```
 
 ---
@@ -77,7 +82,7 @@ Booking marked "boarded"
 
 ## API Endpoints
 
-### Total APIs: 27
+### Total APIs: 33
 
 **User-Facing (Public APIs - No Auth Required):**
 1. POST `/api2/bus/types` - Get bus types
@@ -102,22 +107,28 @@ Booking marked "boarded"
 9. GET `/api2/vehicles` - List vehicles
 10. GET `/api2/passengers` - List passengers
 
-**Driver-Facing (8):**
+**Driver-Facing (14):**
 1. POST `/api2/bus-driver/auth/login-otp` - Send OTP for driver login
 2. POST `/api2/bus-driver/auth/verify-otp` - Verify OTP & authenticate
-3. GET `/api2/bus-driver/profile` - Get driver profile
-4. PUT `/api2/bus-driver/profile` - Update driver profile
-5. PATCH `/api2/bus-driver/duty-status` - Toggle duty status
-6. GET `/api2/bus-driver/assigned-trips` - Get assigned trips
-7. GET `/api2/bus-driver/trips/:id/manifest` - Get passenger manifest
-8. POST `/api2/bus-driver/available-schedules` - Get available schedules ⭐
-9. POST `/api2/bus-driver/accept-assignment` - Accept assignment ⭐
-10. POST `/api2/bus-driver/my-assignments` - Get my assignments ⭐
-11. POST `/api2/bus-driver/assignments/:id/start` - Start assignment ⭐
-12. POST `/api2/bus-driver/assignments/:id/complete` - Complete assignment ⭐
-13. POST `/api2/bus-driver/trips/:id/start` - Start trip ⭐
-14. POST `/api2/bus-driver/trips/:id/complete` - Complete trip ⭐
-15. POST `/api2/bus-driver/scan-boarding-pass` - Scan boarding pass ⭐ NEW
+3. GET `/api2/bus-driver/home` - Driver home dashboard (Cityflo-style) ⭐ NEW
+4. GET `/api2/bus-driver/profile` - Get driver profile
+5. PUT `/api2/bus-driver/profile` - Update driver profile
+6. PATCH `/api2/bus-driver/duty-status` - Toggle duty status
+7. GET `/api2/bus-driver/assigned-trips` - Get assigned trips
+8. GET `/api2/bus-driver/trips/:id` - Get trip details & route stops ⭐
+9. GET `/api2/bus-driver/trips/:id/manifest` - Get passenger manifest
+10. GET `/api2/bus-driver/trips/:id/current-stop` - Get current active stop info ⭐ NEW
+11. POST `/api2/bus-driver/trips/:id/stops/:stopId/arrive` - Arrive at stop with GPS ⭐ NEW
+12. GET `/api2/bus-driver/trips/:id/stops/:stopId/passengers` - Get stop-specific passengers ⭐ NEW
+13. POST `/api2/bus-driver/trips/:id/stops/:stopId/complete` - Mark stop completed ⭐ NEW
+14. POST `/api2/bus-driver/trips/:id/stops/:stopId/mark-no-show` - Mark passenger no-show at stop ⭐ NEW
+15. POST `/api2/bus-driver/available-schedules` - Get available schedules ⭐
+16. POST `/api2/bus-driver/accept-assignment` - Accept assignment ⭐
+17. POST `/api2/bus-driver/trips/:id/start` - Start trip ⭐
+18. POST `/api2/bus-driver/scan-boarding-pass` - Scan boarding pass (with stop validation) ⭐
+19. POST `/api2/bus-driver/confirm-boarding` - Confirm boarding via PIN ⭐
+20. POST `/api2/bus-driver/trips/:id/complete` - Complete trip ⭐
+21. POST `/api2/bus-driver/location/update` - Update GPS live location ⭐
 16. POST `/api2/bus-driver/confirm-boarding` - Confirm boarding ⭐ NEW
 17. POST `/api2/bus-driver/manual-verify-boarding` - Manual verify boarding ⭐ NEW
 18. POST `/api2/bus-driver/location/update` - Update GPS location
@@ -1581,11 +1592,267 @@ Authorization: Bearer {driverToken}
                 "destination_stop": "Pune Station",
                 "boarding_status": "not_boarded",
                 "boarding_pass_code": "BP-8F72K9M4",
-                "boarding_pin": "4821",
                 "boarded_at": null,
                 "payment_status": "paid"
             }
         ]
+    }
+}
+```
+
+---
+
+### GET `/api2/bus-driver/home`
+
+**Description:** Get driver home dashboard overview (Cityflo-style captain view), including active trip, current stop, next stop, and boarding counters.
+
+**Headers:**
+```
+Authorization: Bearer {driverToken}
+```
+
+**Success Response (200):**
+```json
+{
+    "status": 200,
+    "success": true,
+    "data": {
+        "driver": {
+            "id": 2,
+            "name": "Rajesh Kumar",
+            "online_status": "Online"
+        },
+        "today": {
+            "date": "2026-10-05"
+        },
+        "current_trip": {
+            "trip_id": 101,
+            "schedule_code": "SCH-2026-7528",
+            "status": "Active",
+            "bus_number": "WB-12-AB-1234",
+            "route_name": "New Town → Sector V",
+            "departure_time": "08:00:00",
+            "trip_date": "2026-10-05"
+        },
+        "current_stop": {
+            "stop_id": 12,
+            "name": "City Centre 2",
+            "sequence": 2,
+            "eta": "08:18:00"
+        },
+        "next_stop": {
+            "stop_id": 13,
+            "name": "Eco Park",
+            "sequence": 3
+        },
+        "boarding": {
+            "total": 18,
+            "boarded": 12,
+            "pending": 6
+        }
+    }
+}
+```
+
+---
+
+### GET `/api2/bus-driver/trips/:id/current-stop`
+
+**Description:** Get real-time current stop info for an active trip, including ETA, location coordinates, and stop boarding summary.
+
+**Headers:**
+```
+Authorization: Bearer {driverToken}
+```
+
+**Success Response (200):**
+```json
+{
+    "status": 200,
+    "success": true,
+    "data": {
+        "trip_id": 101,
+        "stop": {
+            "id": 12,
+            "name": "City Centre 2",
+            "sequence": 2,
+            "latitude": 22.5901,
+            "longitude": 88.4781,
+            "scheduled_time": "08:00:00",
+            "eta": "08:02:00"
+        },
+        "passengers": {
+            "total": 8,
+            "boarded": 5,
+            "pending": 3
+        }
+    }
+}
+```
+
+---
+
+### POST `/api2/bus-driver/trips/:id/stops/:stopId/arrive`
+
+**Description:** Mark bus arrival at a specific stop along the route with GPS coordinates.
+
+**Headers:**
+```
+Authorization: Bearer {driverToken}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "latitude": 22.5901,
+    "longitude": 88.4781
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "status": 200,
+    "success": true,
+    "message": "Arrived at stop City Centre 2",
+    "data": {
+        "trip_id": 101,
+        "stop_id": 12,
+        "stop_name": "City Centre 2",
+        "arrived_at": "2026-10-05T08:01:30.000Z",
+        "arrival_latitude": 22.5901,
+        "arrival_longitude": 88.4781,
+        "status": "ARRIVED"
+    }
+}
+```
+
+---
+
+### GET `/api2/bus-driver/trips/:id/stops/:stopId/passengers`
+
+**Description:** Get stop-specific passenger manifest for boarding authentication at the current pickup stop.
+
+**Headers:**
+```
+Authorization: Bearer {driverToken}
+```
+
+**Success Response (200):**
+```json
+{
+    "status": 200,
+    "success": true,
+    "data": {
+        "stop": {
+            "id": 12,
+            "name": "City Centre 2"
+        },
+        "summary": {
+            "total": 8,
+            "boarded": 5,
+            "pending": 3,
+            "no_show": 0
+        },
+        "passengers": [
+            {
+                "booking_id": 1001,
+                "booking_reference": "BK-1727771234567-456",
+                "passenger_name": "Rahul Kumar",
+                "passenger_mobile_masked": "98XXXXXX10",
+                "seat": "1A",
+                "boarding_status": "boarded",
+                "boarding_pass_code": "BP-8F72K9M4",
+                "boarded_at": "2026-10-05T08:02:10.000Z"
+            },
+            {
+                "booking_id": 1002,
+                "booking_reference": "BK-1727771234567-457",
+                "passenger_name": "Amit Sharma",
+                "passenger_mobile_masked": "98XXXXXX20",
+                "seat": "2B",
+                "boarding_status": "not_boarded",
+                "boarding_pass_code": "BP-9G83L1N5",
+                "boarded_at": null
+            }
+        ]
+    }
+}
+```
+
+---
+
+### POST `/api2/bus-driver/trips/:id/stops/:stopId/complete`
+
+**Description:** Mark boarding completed for a stop and advance to the next route stop.
+
+**Headers:**
+```
+Authorization: Bearer {driverToken}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "latitude": 22.5905,
+    "longitude": 88.4785
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "status": 200,
+    "success": true,
+    "message": "Stop completed successfully",
+    "data": {
+        "stop_id": 12,
+        "total_passengers": 8,
+        "boarded": 7,
+        "no_show": 1,
+        "completed_at": "2026-10-05T08:05:00.000Z",
+        "next_stop": {
+            "stop_id": 13,
+            "name": "Eco Park",
+            "sequence": 3
+        }
+    }
+}
+```
+
+---
+
+### POST `/api2/bus-driver/trips/:id/stops/:stopId/mark-no-show`
+
+**Description:** Mark a passenger who did not show up at their pickup stop as no-show.
+
+**Headers:**
+```
+Authorization: Bearer {driverToken}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "booking_id": 1002,
+    "reason": "Passenger did not arrive at stop"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "status": 200,
+    "success": true,
+    "message": "Passenger marked as no-show",
+    "data": {
+        "booking_id": 1002,
+        "booking_reference": "BK-1727771234567-457",
+        "passenger_name": "Amit Sharma",
+        "boarding_status": "no_show"
     }
 }
 ```

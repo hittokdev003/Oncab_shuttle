@@ -100,8 +100,8 @@ const calcHaversineDistanceKm = (lat1, lon1, lat2, lon2) => {
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
@@ -110,7 +110,7 @@ const calcHaversineDistanceKm = (lat1, lon1, lat2, lon2) => {
 const formatDistanceAndLabel = (distKm) => {
   const distMeters = Math.round(distKm * 1000);
   const roundedKm = Number(distKm.toFixed(2));
-  
+
   if (distKm <= 1.0) {
     const walkMins = Math.max(1, Math.ceil(distMeters / 80));
     const walkLabel = distMeters <= 100 ? 'less than a min walk' : `${walkMins} min walk`;
@@ -150,7 +150,7 @@ const formatTime12h = (timeStr, offsetMins = 0) => {
   let baseMins = getMinutesFromMidnight(timeStr);
   let totalMins = (baseMins + offsetMins) % (24 * 60);
   if (totalMins < 0) totalMins += 24 * 60;
-  
+
   const h24 = Math.floor(totalMins / 60);
   const m = totalMins % 60;
   const ampm = h24 >= 12 ? 'PM' : 'AM';
@@ -164,7 +164,7 @@ const fetchSchedulesForRouteStopPair = async ({ routeId, pickupStopId, dropStopI
   if (reqPassengers < 1) {
     return { success: false, reason: 'INVALID_PASSENGERS', schedules: [] };
   }
-  
+
   const searchDateStr = travelDate || new Date().toISOString().split('T')[0];
 
   let route = await Route.findOne({
@@ -369,18 +369,40 @@ const fetchSchedulesForRouteStopPair = async ({ routeId, pickupStopId, dropStopI
 // ── 3. Search Routes with Filters ─────────────────────────────
 exports.searchRoutes = async (req, res, next) => {
   try {
-    const rawPickup = req.body?.pickup || req.query?.pickup;
-    const rawDropoff = req.body?.dropoff || req.query?.dropoff;
+    const rawPickupObj = req.body?.pickup ?? req.query?.pickup;
+    const rawDropoffObj = req.body?.dropoff ?? req.query?.dropoff;
 
-    const pLatRaw = req.body?.pickup_latitude ?? req.query?.pickup_latitude ?? req.body?.pickup_lat ?? req.query?.pickup_lat;
-    const pLngRaw = req.body?.pickup_longitude ?? req.query?.pickup_longitude ?? req.body?.pickup_lng ?? req.query?.pickup_lng;
-    const dLatRaw = req.body?.dropoff_latitude ?? req.query?.dropoff_latitude ?? req.body?.dropoff_lat ?? req.query?.dropoff_lat;
-    const dLngRaw = req.body?.dropoff_longitude ?? req.query?.dropoff_longitude ?? req.body?.dropoff_lng ?? req.query?.dropoff_lng;
+    // Extract latitude and longitude from nested objects or flat parameters
+    const pLatRaw = (typeof rawPickupObj === 'object' && rawPickupObj !== null ? (rawPickupObj.latitude ?? rawPickupObj.lat) : undefined)
+      ?? req.body?.pickup_latitude ?? req.query?.pickup_latitude ?? req.body?.pickup_lat ?? req.query?.pickup_lat;
+
+    const pLngRaw = (typeof rawPickupObj === 'object' && rawPickupObj !== null ? (rawPickupObj.longitude ?? rawPickupObj.lng) : undefined)
+      ?? req.body?.pickup_longitude ?? req.query?.pickup_longitude ?? req.body?.pickup_lng ?? req.query?.pickup_lng;
+
+    const dLatRaw = (typeof rawDropoffObj === 'object' && rawDropoffObj !== null ? (rawDropoffObj.latitude ?? rawDropoffObj.lat) : undefined)
+      ?? req.body?.dropoff_latitude ?? req.query?.dropoff_latitude ?? req.body?.dropoff_lat ?? req.query?.dropoff_lat;
+
+    const dLngRaw = (typeof rawDropoffObj === 'object' && rawDropoffObj !== null ? (rawDropoffObj.longitude ?? rawDropoffObj.lng) : undefined)
+      ?? req.body?.dropoff_longitude ?? req.query?.dropoff_longitude ?? req.body?.dropoff_lng ?? req.query?.dropoff_lng;
 
     let pLat = pLatRaw !== undefined && pLatRaw !== null && pLatRaw !== '' ? parseFloat(pLatRaw) : NaN;
     let pLng = pLngRaw !== undefined && pLngRaw !== null && pLngRaw !== '' ? parseFloat(pLngRaw) : NaN;
     let dLat = dLatRaw !== undefined && dLatRaw !== null && dLatRaw !== '' ? parseFloat(dLatRaw) : NaN;
     let dLng = dLngRaw !== undefined && dLngRaw !== null && dLngRaw !== '' ? parseFloat(dLngRaw) : NaN;
+
+    // Extract names from pickup_name/dropoff_name or pickup/dropoff if string or pickup.name/dropoff.name
+    let rawPickupName = req.body?.pickup_name || req.query?.pickup_name || req.body?.pickup_location || req.query?.pickup_location;
+    if (!rawPickupName && typeof rawPickupObj === 'string') rawPickupName = rawPickupObj;
+    if (!rawPickupName && typeof rawPickupObj === 'object' && rawPickupObj !== null && typeof rawPickupObj.name === 'string') rawPickupName = rawPickupObj.name;
+    if (!rawPickupName && !isNaN(pLat) && !isNaN(pLng)) rawPickupName = 'Pickup Location';
+
+    let rawDropoffName = req.body?.dropoff_name || req.query?.dropoff_name || req.body?.dropoff_location || req.query?.dropoff_location;
+    if (!rawDropoffName && typeof rawDropoffObj === 'string') rawDropoffName = rawDropoffObj;
+    if (!rawDropoffName && typeof rawDropoffObj === 'object' && rawDropoffObj !== null && typeof rawDropoffObj.name === 'string') rawDropoffName = rawDropoffObj.name;
+    if (!rawDropoffName && !isNaN(dLat) && !isNaN(dLng)) rawDropoffName = 'Dropoff Location';
+
+    const rawPickup = rawPickupName;
+    const rawDropoff = rawDropoffName;
 
     // STEP 1: Strict Validation - Required fields check
     const errors = {};
@@ -473,7 +495,7 @@ exports.searchRoutes = async (req, res, next) => {
       }
 
       const pSeq = Number(bestPickupStop.stop_sequence || 1);
-      
+
       let bestDropStop = null;
       let minDropDistKm = Infinity;
 
