@@ -19,6 +19,8 @@ router.post('/routes', busController.getRoutes);
 // Search Routes with Filters
 router.get('/search-routes', busController.searchRoutes);
 router.post('/search-routes', busController.searchRoutes);
+router.get('/search', busController.searchRoutes);
+router.post('/search', busController.searchRoutes);
 
 // Schedules
 router.get('/schedules', busController.getSchedules);

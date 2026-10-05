@@ -56,13 +56,27 @@ exports.create = async (req, res, next) => {
   try {
     const { trip_id, passenger_id, passenger_name, passenger_mobile, passenger_email, origin_stop_id, destination_stop_id, travel_date, seat_numbers, total_seats, payment_method, coupon_id, special_requests } = req.body;
 
-    const trip = await Trip.findByPk(trip_id, { transaction: t });
+    const trip = await Trip.findByPk(trip_id, {
+      include: [
+        { model: Vehicle, as: 'vehicle', required: false },
+        { model: BusType, as: 'bus_type', required: false },
+      ],
+      transaction: t,
+    });
     if (!trip) { await t.rollback(); return res.status(404).json({ success: false, message: 'Trip not found' }); }
 
-    const available = trip.seat_capacity - trip.booked_seats;
+    const effectiveCapacity = trip.vehicle?.total_seats || trip.bus_type?.total_seats || 30;
+    const available = effectiveCapacity - (trip.booked_seats || 0);
     if (available < (total_seats || 1)) { await t.rollback(); return res.status(409).json({ success: false, message: `Only ${available} seats available` }); }
 
-    let total_fare = trip.base_fare * (total_seats || 1);
+    const fareResult = await resolveFare({
+      routeId: trip.route_id,
+      originStopId: origin_stop_id,
+      destinationStopId: destination_stop_id,
+      fallbackFare: 0,
+      transaction: t,
+    });
+    let total_fare = (fareResult.fare || 0) * (total_seats || 1);
     let discount_amount = 0;
 
     if (coupon_id) {

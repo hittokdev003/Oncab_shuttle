@@ -66,11 +66,18 @@ exports.show = async (req, res, next) => {
 // ── Create Trip ────────────────────────────────────────────
 exports.create = async (req, res, next) => {
   try {
-    const { schedule_code, route_id, bus_type_id, departure_time, arrival_time, operating_days, base_fare, fare_per_km, seat_capacity, trip_date, valid_from, valid_until, driver_id, vehicle_id, notes } = req.body;
+    let { schedule_code, route_id, bus_type_id, departure_time, arrival_time, operating_days, trip_date, valid_from, valid_until, driver_id, vehicle_id, notes } = req.body;
     const exists = await Trip.findOne({ where: { schedule_code } });
     if (exists) return res.status(409).json({ success: false, message: 'Schedule code already exists' });
 
-    const trip = await Trip.create({ schedule_code, route_id, bus_type_id, departure_time, arrival_time, operating_days, base_fare, fare_per_km, seat_capacity, trip_date, valid_from, valid_until, driver_id, vehicle_id, notes });
+    if (!bus_type_id && vehicle_id) {
+      const vehicle = await Vehicle.findByPk(vehicle_id);
+      if (vehicle && vehicle.bus_type_id) {
+        bus_type_id = vehicle.bus_type_id;
+      }
+    }
+
+    const trip = await Trip.create({ schedule_code, route_id, bus_type_id, departure_time, arrival_time, operating_days, trip_date, valid_from, valid_until, driver_id, vehicle_id, notes });
 
     await logAction({ userId: req.user?.id, userType: req.user?.role?.name, userName: req.user?.name, action: 'create', module: 'trips', entityType: 'Trip', entityId: trip.id, newValues: { schedule_code, trip_date }, ipAddress: req.ip, description: `Created trip ${schedule_code}` });
 
@@ -86,7 +93,14 @@ exports.update = async (req, res, next) => {
   try {
     const trip = await Trip.findByPk(req.params.id);
     if (!trip) return res.status(404).json({ success: false, message: 'Trip not found' });
-    await trip.update(req.body);
+    const payload = { ...req.body };
+    if (!payload.bus_type_id && payload.vehicle_id) {
+      const vehicle = await Vehicle.findByPk(payload.vehicle_id);
+      if (vehicle && vehicle.bus_type_id) {
+        payload.bus_type_id = vehicle.bus_type_id;
+      }
+    }
+    await trip.update(payload);
     const updated = await Trip.findByPk(trip.id, { include: TRIP_INCLUDE });
     res.json({ success: true, message: 'Trip updated', data: updated });
   } catch (err) {
@@ -147,8 +161,12 @@ exports.assignVehicle = async (req, res, next) => {
     const { vehicle_id } = req.body;
     const vehicle = await Vehicle.findByPk(vehicle_id);
     if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
-    await trip.update({ vehicle_id });
-    res.json({ success: true, message: 'Vehicle assigned', data: { trip_id: trip.id, vehicle_id } });
+    const payload = { vehicle_id };
+    if (vehicle.bus_type_id) {
+      payload.bus_type_id = vehicle.bus_type_id;
+    }
+    await trip.update(payload);
+    res.json({ success: true, message: 'Vehicle assigned', data: { trip_id: trip.id, vehicle_id, bus_type_id: payload.bus_type_id || trip.bus_type_id } });
   } catch (err) {
     next(err);
   }

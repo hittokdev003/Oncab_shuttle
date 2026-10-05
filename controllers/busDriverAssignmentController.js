@@ -56,7 +56,7 @@ exports.getAvailableSchedules = async (req, res, next) => {
     const eligibility = await getEligibleDriver(req.driver.id);
     if (respondForEligibility(res, eligibility)) return;
 
-    const requestedDate = req.body.assignment_date;
+    const requestedDate = req.body?.assignment_date || req.query?.assignment_date;
     const date = requestedDate ? parseAssignmentDate(requestedDate) : null;
     if (requestedDate && (!date || date < new Date(`${todayDate()}T00:00:00.000Z`))) {
       return res.status(400).json({ status: 400, success: false, message: 'assignment_date must be a valid date today or later' });
@@ -98,8 +98,8 @@ exports.acceptAssignment = async (req, res, next) => {
     const eligibility = await getEligibleDriver(req.driver.id);
     if (respondForEligibility(res, eligibility)) return;
 
-    const scheduleId = Number(req.body.schedule_id);
-    const assignmentDate = req.body.assignment_date;
+    const scheduleId = Number(req.body?.schedule_id);
+    const assignmentDate = req.body?.assignment_date;
     const date = parseAssignmentDate(assignmentDate);
     if (!Number.isInteger(scheduleId) || scheduleId < 1 || !date || assignmentDate < todayDate()) {
       return res.status(400).json({ status: 400, success: false, message: 'Valid schedule_id and assignment_date (today or later) are required' });
@@ -190,7 +190,7 @@ exports.startAssignment = async (req, res, next) => {
     if (!Number.isInteger(assignmentId) || assignmentId < 1) {
       return res.status(400).json({ status: 400, success: false, message: 'A valid assignment_id is required' });
     }
-    const rawStartOdometer = req.body.start_odometer;
+    const rawStartOdometer = req.body?.start_odometer;
     const startOdometer = Number(rawStartOdometer);
     if (rawStartOdometer === null || rawStartOdometer === '' || !Number.isFinite(startOdometer) || startOdometer <= 0) {
       return res.status(400).json({ status: 400, success: false, message: 'A valid positive start_odometer is required' });
@@ -212,7 +212,7 @@ exports.completeAssignment = async (req, res, next) => {
     if (!Number.isInteger(assignmentId) || assignmentId < 1) {
       return res.status(400).json({ status: 400, success: false, message: 'A valid assignment_id is required' });
     }
-    const rawEndOdometer = req.body.end_odometer;
+    const rawEndOdometer = req.body?.end_odometer;
     const endOdometer = Number(rawEndOdometer);
     if (rawEndOdometer === null || rawEndOdometer === '' || !Number.isFinite(endOdometer) || endOdometer <= 0) {
       return res.status(400).json({ status: 400, success: false, message: 'A valid positive end_odometer is required' });
@@ -224,7 +224,7 @@ exports.completeAssignment = async (req, res, next) => {
       return res.status(400).json({ status: 400, success: false, message: 'end_odometer must be greater than start_odometer' });
     }
 
-    await assignment.update({ status: 'completed', end_odometer: endOdometer, ...(req.body.notes !== undefined ? { notes: req.body.notes } : {}) });
+    await assignment.update({ status: 'completed', end_odometer: endOdometer, ...(req.body?.notes !== undefined ? { notes: req.body.notes } : {}) });
     res.json({ status: 200, success: true, message: 'Assignment completed successfully', data: assignment });
   } catch (err) {
     next(err);
@@ -245,11 +245,11 @@ exports.cancelAssignment = async (req, res, next) => {
 };
 
 exports.startTrip = async (req, res, next) => {
-  req.params.id = req.body.assignment_id;
+  req.params.id = req.body?.assignment_id;
   return exports.startAssignment(req, res, next);
 };
 
 exports.completeTrip = async (req, res, next) => {
-  req.params.id = req.body.assignment_id;
+  req.params.id = req.body?.assignment_id;
   return exports.completeAssignment(req, res, next);
 };

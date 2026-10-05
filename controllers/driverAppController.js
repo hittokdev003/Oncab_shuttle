@@ -34,7 +34,7 @@ const maskMobile = (mobile) => {
  */
 exports.sendOtp = async (req, res, next) => {
   try {
-    const { mobile } = req.body;
+    const { mobile } = req.body || {};
     if (!mobile) {
       return res.status(400).json({ status: 400, success: false, message: 'Mobile number is required' });
     }
@@ -75,7 +75,7 @@ exports.sendOtp = async (req, res, next) => {
  */
 exports.verifyOtp = async (req, res, next) => {
   try {
-    const { mobile, otp, device_id } = req.body;
+    const { mobile, otp, device_id } = req.body || {};
     if (!mobile || !otp) {
       return res.status(400).json({ status: 400, success: false, message: 'Mobile number and OTP are required' });
     }
@@ -158,7 +158,7 @@ exports.getProfile = async (req, res, next) => {
  */
 exports.updateProfile = async (req, res, next) => {
   try {
-    const { name, email, device_id, address } = req.body;
+    const { name, email, device_id, address } = req.body || {};
     const driver = req.driver;
 
     await driver.update({
@@ -185,7 +185,7 @@ exports.updateProfile = async (req, res, next) => {
  */
 exports.toggleDutyStatus = async (req, res, next) => {
   try {
-    const { online_status } = req.body;
+    const { online_status } = req.body || {};
     if (!['Online', 'Offline'].includes(online_status)) {
       return res.status(400).json({ status: 400, success: false, message: 'Invalid online_status. Must be Online or Offline' });
     }
@@ -496,7 +496,7 @@ exports.completeTrip = async (req, res, next) => {
  */
 exports.scanBoardingPass = async (req, res, next) => {
   try {
-    const { trip_id, assignment_id, boarding_pass_code } = req.body;
+    const { trip_id, assignment_id, boarding_pass_code } = req.body || {};
     const targetTripId = trip_id || assignment_id;
 
     if (!boarding_pass_code) {
@@ -572,7 +572,7 @@ exports.scanBoardingPass = async (req, res, next) => {
  */
 exports.confirmBoarding = async (req, res, next) => {
   try {
-    const { booking_id, boarding_pin } = req.body;
+    const { booking_id, boarding_pin } = req.body || {};
 
     if (!booking_id || !boarding_pin) {
       return res.status(400).json({
@@ -642,7 +642,7 @@ exports.confirmBoarding = async (req, res, next) => {
  */
 exports.manualVerifyBoarding = async (req, res, next) => {
   try {
-    const { trip_id, query } = req.body;
+    const { trip_id, query } = req.body || {};
     if (!trip_id || !query) {
       return res.status(400).json({ status: 400, success: false, message: 'trip_id and query (phone/ref/seat) are required' });
     }
@@ -688,7 +688,7 @@ exports.manualVerifyBoarding = async (req, res, next) => {
  */
 exports.updateLocation = async (req, res, next) => {
   try {
-    const { latitude, longitude, speed, heading, trip_id } = req.body;
+    const { latitude, longitude, speed, heading, trip_id } = req.body || {};
     const parsedLatitude = Number(latitude);
     const parsedLongitude = Number(longitude);
     if (latitude == null || longitude == null || latitude === '' || longitude === ''
