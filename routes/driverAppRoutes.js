@@ -18,6 +18,7 @@ router.post('/verify-otp', driverAppController.verifyOtp);
 router.use(authenticateDriver);
 
 // Profile & Duty Status
+router.get('/home', driverAppController.getDriverHome);
 router.get('/profile', driverAppController.getProfile);
 router.put('/profile', driverAppController.updateProfile);
 router.patch('/duty-status', driverAppController.toggleDutyStatus);
@@ -34,6 +35,13 @@ router.post('/assignments/:id/complete', busDriverAssignmentController.completeA
 router.post('/assignments/:id/cancel', busDriverAssignmentController.cancelAssignment);
 router.get('/trips/:id', driverAppController.getTripDetails);
 router.get('/trips/:id/manifest', driverAppController.getPassengerManifest);
+
+// Stop-by-Stop Navigation & Boarding Operations (Cityflo-style)
+router.get('/trips/:id/current-stop', driverAppController.getCurrentStop);
+router.post('/trips/:id/stops/:stopId/arrive', driverAppController.arriveAtStop);
+router.get('/trips/:id/stops/:stopId/passengers', driverAppController.getStopPassengers);
+router.post('/trips/:id/stops/:stopId/complete', driverAppController.completeStop);
+router.post('/trips/:id/stops/:stopId/mark-no-show', driverAppController.markNoShow);
 
 // Trip Action Operations
 router.post('/trips/:id/start', driverAppController.startTrip);
