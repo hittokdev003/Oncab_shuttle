@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op, fn, col, literal } = require('sequelize');
-const { Booking, Trip, Driver, Vehicle, Passenger, Payment, Refund, Route, AuditLog } = require('../models');
+const { Booking, Trip, Driver, Vehicle, Passenger, CustomerUser, Payment, Refund, Route, AuditLog } = require('../models');
 const sequelize = require('../config/database');
 
 // ── Dashboard Stats ────────────────────────────────────────
@@ -9,6 +9,7 @@ exports.stats = async (req, res, next) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const thisMonth = new Date(); thisMonth.setDate(1);
+    const isAdmin = req.user?.role?.name === 'admin';
     const isOwner = req.user?.role?.name === 'owner';
     const ownerVehicleWhere = isOwner ? { owner_id: req.user.id } : {};
     const ownerDriverWhere = isOwner ? { owner_id: req.user.id } : {};
@@ -26,16 +27,13 @@ exports.stats = async (req, res, next) => {
     const ownerBookingIds = isOwner
       ? (await Booking.findAll({ attributes: ['id'], where: ownerBookingWhere, raw: true })).map((booking) => booking.id)
       : [];
-    const ownerPaymentWhere = isOwner ? { booking_id: { [Op.in]: ownerBookingIds } } : {};
-
     const [
       totalTrips, todayTrips, activeTrips,
       totalBookings, todayBookings, confirmedBookings,
       totalDrivers, activeDrivers,
       totalVehicles, activeVehicles,
       totalPassengers,
-      totalRevenue, todayRevenue,
-      pendingRefunds, cancelledBookings,
+      cancelledBookings,
     ] = await Promise.all([
       Trip.count({ where: ownerTripWhere }),
       Trip.count({ where: { ...ownerTripWhere, trip_date: today } }),
@@ -48,23 +46,8 @@ exports.stats = async (req, res, next) => {
       Vehicle.count({ where: ownerVehicleWhere }),
       Vehicle.count({ where: { ...ownerVehicleWhere, status: 'Active' } }),
       isOwner ? Booking.count({ distinct: true, col: 'passenger_id', where: ownerBookingWhere }) : Passenger.count(),
-      Payment.sum('amount', { where: { ...ownerPaymentWhere, status: 'captured' } }),
-      Payment.sum('amount', { where: { ...ownerPaymentWhere, status: 'captured', created_at: { [Op.gte]: new Date(today) } } }),
-      Refund.count({ where: { ...(isOwner ? { booking_id: { [Op.in]: ownerBookingIds } } : {}), status: 'pending' } }),
       Booking.count({ where: { ...ownerBookingWhere, booking_status: 'cancelled' } }),
     ]);
-
-    // Monthly revenue (last 6 months)
-    const revenueChart = await Payment.findAll({
-      attributes: [
-        [fn('DATE_FORMAT', col('created_at'), '%Y-%m'), 'month'],
-        [fn('SUM', col('amount')), 'revenue'],
-        [fn('COUNT', col('id')), 'transactions'],
-      ],
-      where: { ...ownerPaymentWhere, status: 'captured', created_at: { [Op.gte]: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } },
-      group: [literal('month')],
-      order: [[literal('month'), 'ASC']],
-    });
 
     // Bookings by status
     const bookingsByStatus = await Booking.findAll({
@@ -96,14 +79,46 @@ exports.stats = async (req, res, next) => {
 
     // Recent bookings
     const recentBookings = await Booking.findAll({
+      attributes: ['id', 'passenger_name', 'booking_reference', 'booking_status'],
       where: ownerBookingWhere,
       limit: 10,
       order: [['created_at', 'DESC']],
       include: [
         { model: Trip, as: 'trip', attributes: ['id', 'schedule_code'] },
-        { model: Passenger, as: 'passenger', attributes: ['id', 'name', 'mobile'] },
+        { model: CustomerUser, as: 'passenger', attributes: ['id', 'name', 'mobile'] },
       ],
+      attributes: isAdmin
+        ? ['id', 'passenger_name', 'booking_reference', 'booking_status', 'final_amount']
+        : ['id', 'passenger_name', 'booking_reference', 'booking_status'],
     });
+
+    let adminFinancialSummary = {};
+    let revenueChart = [];
+    if (isAdmin) {
+      const [totalRevenue, todayRevenue, pendingRefunds, pendingRefundAmount, completedRefundAmount] = await Promise.all([
+        Payment.sum('amount', { where: { status: 'captured' } }),
+        Payment.sum('amount', { where: { status: 'captured', created_at: { [Op.gte]: new Date(today) } } }),
+        Refund.count({ where: { status: 'pending' } }),
+        Refund.sum('refund_amount', { where: { status: 'pending' } }),
+        Refund.sum('refund_amount', { where: { status: 'completed' } }),
+      ]);
+
+      adminFinancialSummary = {
+        revenue: { total: totalRevenue || 0, today: todayRevenue || 0 },
+        refunds: { pending: pendingRefunds, pendingAmount: pendingRefundAmount || 0, completedAmount: completedRefundAmount || 0 },
+      };
+
+      revenueChart = await Payment.findAll({
+        attributes: [
+          [fn('DATE_FORMAT', col('created_at'), '%Y-%m'), 'month'],
+          [fn('SUM', col('amount')), 'revenue'],
+          [fn('COUNT', col('id')), 'transactions'],
+        ],
+        where: { status: 'captured', created_at: { [Op.gte]: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } },
+        group: [literal('month')],
+        order: [[literal('month'), 'ASC']],
+      });
+    }
 
     // Top routes
     const topRoutes = await Booking.findAll({
@@ -124,11 +139,10 @@ exports.stats = async (req, res, next) => {
           drivers: { total: totalDrivers, active: activeDrivers },
           vehicles: { total: totalVehicles, active: activeVehicles },
           passengers: { total: totalPassengers },
-          revenue: { total: totalRevenue || 0, today: todayRevenue || 0 },
-          refunds: { pending: pendingRefunds },
+          ...adminFinancialSummary,
         },
         charts: {
-          revenue: revenueChart,
+          ...(isAdmin ? { revenue: revenueChart } : {}),
           bookingsByStatus,
           vehicleStatus: vehicleStatusChart,
           driverStatus: driverStatusChart,

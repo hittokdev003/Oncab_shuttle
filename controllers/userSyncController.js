@@ -1,7 +1,31 @@
 'use strict';
 
 const { QueryTypes } = require('sequelize');
+const jwt = require('jsonwebtoken');
 const sequelize = require('../config/database');
+const { CustomerUser } = require('../models');
+
+const createPassengerToken = async (userId) => {
+    if (!process.env.JWT_SECRET) {
+        throw new Error('JWT_SECRET is not configured');
+    }
+
+    const user = await CustomerUser.findByPk(userId, {
+        attributes: ['id', 'status', 'block_status'],
+    });
+    if (!user) {
+        throw new Error('Synced user was not found; cannot create passenger token');
+    }
+    if (user.status === 'Inactive' || user.block_status === 'Block') {
+        throw new Error('Inactive or blocked users cannot receive a passenger token');
+    }
+
+    return jwt.sign(
+        { id: user.id, passenger_id: user.id, role: 'passenger', token_type: 'passenger' },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_PASSENGER_EXPIRY || process.env.JWT_ACCESS_EXPIRY || '15m' }
+    );
+};
 
 const ALLOWED_FIELDS = [
     'city_id',
@@ -148,11 +172,13 @@ const userSync = async (req, res) => {
                 type: QueryTypes.INSERT
             });
 
+            const token = await createPassengerToken(user_id);
 
             return res.status(200).json({
                 status: true,
                 message: 'User inserted successfully',
-                user_id: user_id
+                user_id: user_id,
+                token,
             });
         }
 
@@ -186,10 +212,13 @@ const userSync = async (req, res) => {
 
         if (updateFields.length === 0) {
 
+            const token = await createPassengerToken(user_id);
+
             return res.status(200).json({
                 status: true,
                 message: 'Nothing to update',
-                user_id: user_id
+                user_id: user_id,
+                token,
             });
         }
 
@@ -236,6 +265,8 @@ const userSync = async (req, res) => {
             });
         }
 
+        const token = await createPassengerToken(user_id);
+
 
         // ==========================================
         // SUCCESS
@@ -245,7 +276,8 @@ const userSync = async (req, res) => {
             status: true,
             message: 'User updated successfully',
             user_id: user_id,
-            affected_rows: result
+            affected_rows: result,
+            token,
         });
 
 

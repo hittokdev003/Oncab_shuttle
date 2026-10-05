@@ -2,7 +2,7 @@
 
 const { Op, fn, col } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
-const { Booking, Trip, Passenger, Stop, Payment, Refund, Coupon, Route, Vehicle, Driver } = require('../models');
+const { Booking, Trip, CustomerUser, Stop, Payment, Refund, Coupon, Route, Vehicle, Driver } = require('../models');
 const { logAction } = require('../middleware/auditLog');
 const sequelize = require('../config/database');
 
@@ -14,7 +14,7 @@ const buildPagination = (page, limit) => {
 
 const BOOKING_INCLUDE = [
   { model: Trip, as: 'trip', include: [{ model: Route, as: 'route' }] },
-  { model: Passenger, as: 'passenger', attributes: ['id', 'name', 'mobile', 'email'] },
+  { model: CustomerUser, as: 'passenger', attributes: ['id', 'name', 'mobile', 'email'] },
   { model: Stop, as: 'origin_stop', attributes: ['id', 'stop_name'] },
   { model: Stop, as: 'destination_stop', attributes: ['id', 'stop_name'] },
   { model: Coupon, as: 'coupon', attributes: ['id', 'code', 'code_type', 'amount'] },
@@ -128,8 +128,8 @@ exports.cancel = async (req, res, next) => {
     // Auto-create refund if payment was captured
     if (booking.payment_status === 'paid') {
       const passenger = booking.passenger_id
-        ? await Passenger.findByPk(booking.passenger_id, { transaction: t })
-        : await Passenger.findOne({ where: { mobile: booking.passenger_mobile }, transaction: t });
+        ? await CustomerUser.findByPk(booking.passenger_id, { transaction: t })
+        : await CustomerUser.findOne({ where: { mobile: booking.passenger_mobile }, transaction: t });
       const payment = await Payment.findOne({ where: { booking_id: booking.id, status: ['captured', 'partial_refund'] }, order: [['created_at', 'DESC']], transaction: t });
       const refund_reference = `REF-${Date.now()}`;
       await Refund.create({ booking_id: booking.id, payment_id: payment?.id || null, passenger_id: passenger?.id || booking.passenger_id, refund_reference, refund_amount: booking.final_amount, refund_reason: cancellation_reason || 'Cancelled by admin', status: 'pending', initiated_by: req.user?.id }, { transaction: t });

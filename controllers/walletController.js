@@ -1,13 +1,13 @@
 'use strict';
 
-const { Passenger, WalletTransaction } = require('../models');
+const { CustomerUser, WalletTransaction } = require('../models');
 
 const resolvePassenger = async (req) => {
   const passengerId = req.body?.passenger_id;
   const mobile = String(req.body?.passenger_mobile || '').trim();
   if (!passengerId || !mobile) return { error: 'passenger_id and passenger_mobile are required' };
 
-  const passenger = await Passenger.findOne({ where: { id: passengerId, mobile } });
+  const passenger = await CustomerUser.findOne({ where: { id: passengerId, mobile } });
   if (!passenger) return { error: 'Passenger account could not be verified', status: 404 };
   if (passenger.status === 'Inactive' || passenger.block_status === 'Block') {
     return { error: 'Passenger account is not active', status: 403 };
