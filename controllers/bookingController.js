@@ -127,9 +127,12 @@ exports.cancel = async (req, res, next) => {
 
     // Auto-create refund if payment was captured
     if (booking.payment_status === 'paid') {
+      const passenger = booking.passenger_id
+        ? await Passenger.findByPk(booking.passenger_id, { transaction: t })
+        : await Passenger.findOne({ where: { mobile: booking.passenger_mobile }, transaction: t });
       const payment = await Payment.findOne({ where: { booking_id: booking.id, status: ['captured', 'partial_refund'] }, order: [['created_at', 'DESC']], transaction: t });
       const refund_reference = `REF-${Date.now()}`;
-      await Refund.create({ booking_id: booking.id, payment_id: payment?.id || null, passenger_id: booking.passenger_id, refund_reference, refund_amount: booking.final_amount, refund_reason: cancellation_reason || 'Cancelled by admin', status: 'pending', initiated_by: req.user?.id }, { transaction: t });
+      await Refund.create({ booking_id: booking.id, payment_id: payment?.id || null, passenger_id: passenger?.id || booking.passenger_id, refund_reference, refund_amount: booking.final_amount, refund_reason: cancellation_reason || 'Cancelled by admin', status: 'pending', initiated_by: req.user?.id }, { transaction: t });
     }
 
     await t.commit();
