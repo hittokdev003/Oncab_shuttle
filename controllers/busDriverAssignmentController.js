@@ -1,18 +1,33 @@
 'use strict';
 
 const { Op, UniqueConstraintError } = require('sequelize');
-const { sequelize, Driver, BusType, BusRoute, BusStop, BusSchedule, BusDriverAssignment } = require('../models');
+const { sequelize, Driver, BusType, Route, Stop, BusRoute, BusStop, BusSchedule, BusDriverAssignment } = require('../models');
 
 const assignmentIncludes = [
   {
     model: BusSchedule,
     as: 'schedule',
     include: [
-      { model: BusRoute, as: 'route', include: [{ model: BusStop, as: 'stops' }] },
-      { model: BusType, as: 'bus_type' },
+      {
+        model: Route,
+        as: 'main_route',
+        required: false,
+        include: [{ model: Stop, as: 'stops', required: false }],
+      },
+      { model: BusType, as: 'bus_type', required: false },
     ],
   },
 ];
+
+const formatScheduleRoute = (schedule) => {
+  if (!schedule) return schedule;
+  const item = typeof schedule.toJSON === 'function' ? schedule.toJSON() : schedule;
+  if (item.main_route) {
+    item.route = item.main_route;
+    delete item.main_route;
+  }
+  return item;
+};
 
 const todayDate = () => new Date().toISOString().slice(0, 10);
 
@@ -40,12 +55,23 @@ const respondForEligibility = (res, result) => {
   return true;
 };
 
+const formatDateStr = (val) => {
+  if (!val) return null;
+  if (val instanceof Date) return val.toISOString().slice(0, 10);
+  return String(val).slice(0, 10);
+};
+
 const scheduleCanRunOnDate = (schedule, date) => {
   const dateText = date.toISOString().slice(0, 10);
-  if (schedule.valid_from && schedule.valid_from > dateText) return false;
-  if (schedule.valid_until && schedule.valid_until < dateText) return false;
-  if (schedule.trip_date && schedule.trip_date !== dateText) return false;
+  const validFrom = formatDateStr(schedule.valid_from);
+  const validUntil = formatDateStr(schedule.valid_until);
+  const tripDate = formatDateStr(schedule.trip_date);
 
+  if (validFrom && validFrom > dateText) return false;
+  if (validUntil && validUntil < dateText) return false;
+  if (tripDate && tripDate !== dateText) return false;
+
+  if (!schedule.operating_days) return true;
   const operatingDays = String(schedule.operating_days || '').toLowerCase().split(/[,:]/).map((day) => day.trim());
   const weekday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getUTCDay()];
   return operatingDays.includes(weekday);
@@ -65,29 +91,57 @@ exports.getAvailableSchedules = async (req, res, next) => {
     const existingAssignments = await BusDriverAssignment.findAll({
       attributes: ['schedule_id'],
       where: {
-        driver_id: req.driver.id,
-        assignment_date: { [Op.gte]: todayDate() },
+        ...(requestedDate ? { assignment_date: requestedDate } : { assignment_date: { [Op.gte]: todayDate() } }),
         status: { [Op.ne]: 'cancelled' },
       },
     });
     const assignedScheduleIds = [...new Set(existingAssignments.map((item) => String(item.schedule_id)))];
+    const requestedBusTypeId = req.body?.bus_type_id || req.query?.bus_type_id;
+
     const where = {
-      bus_type_id: eligibility.driver.preferred_bus_type_id,
-      status: 'Active',
+      status: { [Op.in]: ['Active', 'Scheduled'] },
     };
+
+    if (requestedBusTypeId) {
+      where.bus_type_id = requestedBusTypeId;
+    }
+
     if (assignedScheduleIds.length) where.id = { [Op.notIn]: assignedScheduleIds };
 
     const schedules = await BusSchedule.findAll({
       where,
       include: [
-        { model: BusRoute, as: 'route', include: [{ model: BusStop, as: 'stops' }] },
-        { model: BusType, as: 'bus_type' },
+        {
+          model: Route,
+          as: 'main_route',
+          required: false,
+          include: [{ model: Stop, as: 'stops', required: false }],
+        },
+        { model: BusType, as: 'bus_type', required: false },
       ],
       order: [['departure_time', 'ASC']],
     });
-    const available = date ? schedules.filter((schedule) => scheduleCanRunOnDate(schedule, date)) : schedules;
 
-    res.json({ status: 200, success: true, message: 'Available schedules retrieved successfully', data: available });
+    let available = date ? schedules.filter((schedule) => scheduleCanRunOnDate(schedule, date)) : schedules;
+
+    // Prioritize schedules matching driver's preferred_bus_type_id
+    if (eligibility.driver.preferred_bus_type_id) {
+      const preferredTypeId = String(eligibility.driver.preferred_bus_type_id);
+      available.sort((a, b) => {
+        const aMatch = String(a.bus_type_id) === preferredTypeId ? 0 : 1;
+        const bMatch = String(b.bus_type_id) === preferredTypeId ? 0 : 1;
+        return aMatch - bMatch;
+      });
+    }
+
+    const data = available.map(formatScheduleRoute);
+
+    res.json({
+      status: 200,
+      success: true,
+      message: 'Available schedules retrieved successfully',
+      data,
+    });
   } catch (err) {
     next(err);
   }
@@ -106,11 +160,8 @@ exports.acceptAssignment = async (req, res, next) => {
     }
 
     const schedule = await BusSchedule.findByPk(scheduleId);
-    if (!schedule || schedule.status !== 'Active') {
-      return res.status(404).json({ status: 404, success: false, message: 'Active bus schedule not found' });
-    }
-    if (String(schedule.bus_type_id) !== String(eligibility.driver.preferred_bus_type_id)) {
-      return res.status(403).json({ status: 403, success: false, message: 'Schedule bus type does not match your preferred bus type' });
+    if (!schedule || !['Active', 'Scheduled'].includes(schedule.status)) {
+      return res.status(404).json({ status: 404, success: false, message: 'Active or scheduled bus trip not found' });
     }
     if (!scheduleCanRunOnDate(schedule, date)) {
       return res.status(400).json({ status: 400, success: false, message: 'Schedule is not valid for the selected date' });

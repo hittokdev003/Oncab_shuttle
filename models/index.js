@@ -67,9 +67,8 @@ BusType.hasMany(Vehicle, { foreignKey: 'bus_type_id', as: 'vehicles' });
 // ─── Bus Schedule & Driver Assignment ────────────────────
 BusRoute.hasMany(BusStop, { foreignKey: 'route_id', as: 'stops' });
 BusStop.belongsTo(BusRoute, { foreignKey: 'route_id', as: 'route' });
-BusRoute.hasMany(BusSchedule, { foreignKey: 'route_id', as: 'schedules' });
-BusSchedule.belongsTo(BusRoute, { foreignKey: 'route_id', as: 'route' });
-Route.hasMany(BusSchedule, { foreignKey: 'route_id', as: 'bus_schedules' });
+Route.hasMany(BusSchedule, { foreignKey: 'route_id', as: 'schedules' });
+BusSchedule.belongsTo(Route, { foreignKey: 'route_id', as: 'route' });
 BusSchedule.belongsTo(Route, { foreignKey: 'route_id', as: 'main_route' });
 BusType.hasMany(BusSchedule, { foreignKey: 'bus_type_id', as: 'bus_schedules' });
 BusSchedule.belongsTo(BusType, { foreignKey: 'bus_type_id', as: 'bus_type' });
@@ -77,8 +76,8 @@ BusSchedule.hasMany(BusDriverAssignment, { foreignKey: 'schedule_id', as: 'drive
 BusDriverAssignment.belongsTo(BusSchedule, { foreignKey: 'schedule_id', as: 'schedule' });
 Driver.hasMany(BusDriverAssignment, { foreignKey: 'driver_id', as: 'busAssignments' });
 BusDriverAssignment.belongsTo(Driver, { foreignKey: 'driver_id', as: 'driver' });
-BusSchedule.belongsTo(Vehicle, { foreignKey: 'car_id', as: 'vehicle' });
-Vehicle.hasMany(BusSchedule, { foreignKey: 'car_id', as: 'bus_schedules' });
+BusSchedule.belongsTo(Vehicle, { foreignKey: 'vehicle_id', as: 'vehicle' });
+Vehicle.hasMany(BusSchedule, { foreignKey: 'vehicle_id', as: 'bus_schedules' });
 
 Vehicle.hasMany(VehicleDocument, { foreignKey: 'vehicle_id', as: 'documents', onDelete: 'CASCADE' });
 VehicleDocument.belongsTo(Vehicle, { foreignKey: 'vehicle_id', as: 'vehicle' });
