@@ -1,7 +1,8 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Route, Stop, BusRoute, BusStop, BusSchedule, Trip, BusType, RateChart, Booking } = require('../models');
+const { Route, Stop, RouteStop, BusRoute, BusStop, BusSchedule, Trip, BusType, RateChart, Booking } = require('../models');
+const { syncRouteStopsTable } = require('../utils/routeStopMigrator');
 const { resolveFare } = require('../utils/fareCalculator');
 const {
   calcHaversineDistanceKm,
@@ -109,13 +110,65 @@ class BusRouteSearchService {
       });
     }
 
+    // Ensure table migration runs
+    await syncRouteStopsTable();
+
     // 2. Fetch All Active Routes & Route Stops from Database
     let routes = await Route.findAll({
-      where: { status: 'Active', deleted_at: null },
+      where: { status: ['Active', 'Published'], deleted_at: null },
       include: [
         { model: Stop, as: 'stops', required: false, where: { status: 'Active' } },
+        {
+          model: RouteStop,
+          as: 'route_stops',
+          required: false,
+          include: [{ model: Stop, as: 'stop', required: false }],
+        },
       ],
     });
+
+    if (routes && routes.length > 0) {
+      routes = routes.map((r) => {
+        const routeObj = r.toJSON();
+        let finalStops = [];
+        if (routeObj.route_stops && routeObj.route_stops.length > 0) {
+          finalStops = routeObj.route_stops
+            .filter((rs) => rs.stop)
+            .sort((a, b) => Number(a.stop_sequence || 0) - Number(b.stop_sequence || 0))
+            .map((rs) => ({
+              id: rs.stop.id,
+              stop_id: rs.stop.id,
+              stop_name: rs.stop.stop_name,
+              name: rs.stop.stop_name,
+              stop_sequence: rs.stop_sequence,
+              latitude: rs.stop.latitude,
+              longitude: rs.stop.longitude,
+              address: rs.stop.address,
+              landmark: rs.stop.landmark,
+              pickup_allowed: rs.pickup_allowed,
+              dropoff_allowed: rs.dropoff_allowed,
+            }));
+        } else if (routeObj.stops && routeObj.stops.length > 0) {
+          finalStops = routeObj.stops
+            .sort((a, b) => Number(a.stop_sequence || 0) - Number(b.stop_sequence || 0))
+            .map((s) => ({
+              id: s.id,
+              stop_id: s.id,
+              stop_name: s.stop_name,
+              name: s.stop_name,
+              stop_sequence: s.stop_sequence || 1,
+              latitude: s.latitude,
+              longitude: s.longitude,
+              address: s.address,
+              landmark: s.landmark,
+              pickup_allowed: true,
+              dropoff_allowed: true,
+            }));
+        }
+        routeObj.stops = finalStops;
+        return routeObj;
+      });
+    }
 
     if (!routes || routes.length === 0) {
       routes = await BusRoute.findAll({
@@ -253,8 +306,36 @@ class BusRouteSearchService {
 
       if (!scheduleRes.success || scheduleRes.schedules.length === 0) continue;
 
-      const pDistKm = userPLat != null && userPLng != null ? calcHaversineDistanceKm(userPLat, userPLng, pickupStop.latitude, pickupStop.longitude) : 0;
-      const dDistKm = userDLat != null && userDLng != null ? calcHaversineDistanceKm(userDLat, userDLng, dropStop.latitude, dropStop.longitude) : 0;
+      const userPLatActual = userPLat != null ? userPLat : (pickupCandidates[0]?.latitude != null ? pickupCandidates[0].latitude : null);
+      const userPLngActual = userPLng != null ? userPLng : (pickupCandidates[0]?.longitude != null ? pickupCandidates[0].longitude : null);
+      const userDLatActual = userDLat != null ? userDLat : (dropoffCandidates[0]?.latitude != null ? dropoffCandidates[0].latitude : null);
+      const userDLngActual = userDLng != null ? userDLng : (dropoffCandidates[0]?.longitude != null ? dropoffCandidates[0].longitude : null);
+
+      let pDistKm = (userPLatActual != null && userPLngActual != null && pickupStop.latitude != null && pickupStop.longitude != null)
+        ? calcHaversineDistanceKm(userPLatActual, userPLngActual, pickupStop.latitude, pickupStop.longitude)
+        : 0;
+
+      let dDistKm = (userDLatActual != null && userDLngActual != null && dropStop.latitude != null && dropStop.longitude != null)
+        ? calcHaversineDistanceKm(userDLatActual, userDLngActual, dropStop.latitude, dropStop.longitude)
+        : 0;
+
+      if ((pDistKm === 0 || pDistKm === Infinity) && pickupCandidates.length > 0) {
+        const matchCand = pickupCandidates.find((c) => c.id === pickupStop.id || (c.name && normalizeText(c.name) === normalizeText(pickupStop.stop_name || pickupStop.name)));
+        if (matchCand && matchCand.distance) {
+          pDistKm = matchCand.distance / 1000;
+        } else if (pickupCandidates[0]?.distance) {
+          pDistKm = pickupCandidates[0].distance / 1000;
+        }
+      }
+
+      if ((dDistKm === 0 || dDistKm === Infinity) && dropoffCandidates.length > 0) {
+        const matchCand = dropoffCandidates.find((c) => c.id === dropStop.id || (c.name && normalizeText(c.name) === normalizeText(dropStop.stop_name || dropStop.name)));
+        if (matchCand && matchCand.distance) {
+          dDistKm = matchCand.distance / 1000;
+        } else if (dropoffCandidates[0]?.distance) {
+          dDistKm = dropoffCandidates[0].distance / 1000;
+        }
+      }
 
       matchedResults.push({
         route,
@@ -263,6 +344,7 @@ class BusRouteSearchService {
         pickupDistKm: pDistKm,
         dropDistKm: dDistKm,
         schedules: scheduleRes.schedules,
+        rawSchedules: scheduleRes.rawSchedules || [],
         durationMinutes: scheduleRes.durationMinutes,
         fareAmount: scheduleRes.fareAmount,
         pickupSeq: Number(pickupStop.stop_sequence || 1),
@@ -391,6 +473,7 @@ class BusRouteSearchService {
     return {
       success: true,
       schedules: validSchedules,
+      rawSchedules,
       durationMinutes: tripDurationMins,
       fareAmount,
     };
@@ -455,6 +538,16 @@ class BusRouteSearchService {
     // Cityflo Route Response Objects
     const routesFormatted = finalCandidates.map((cand) => {
       const routeObj = cand.route;
+      const pDistMeters = cand.pickupDistKm != null && cand.pickupDistKm > 0
+        ? Math.round(cand.pickupDistKm * 1000)
+        : (topResolvedPickup?.distance || 0);
+      const dDistMeters = cand.dropDistKm != null && cand.dropDistKm > 0
+        ? Math.round(cand.dropDistKm * 1000)
+        : (topResolvedDropoff?.distance || 0);
+
+      const pDistKmVal = Number((pDistMeters / 1000).toFixed(3));
+      const dDistKmVal = Number((dDistMeters / 1000).toFixed(3));
+
       return {
         route_id: Number(routeObj.id),
         route_name: routeObj.route_name || `${cand.pickupStop.name} → ${cand.dropStop.name}`,
@@ -465,6 +558,8 @@ class BusRouteSearchService {
           stop_order: Number(cand.pickupStop.stop_sequence || 1),
           latitude: parseFloat(cand.pickupStop.latitude),
           longitude: parseFloat(cand.pickupStop.longitude),
+          distance: pDistMeters,
+          distance_km: pDistKmVal,
         },
         dropoff_stop: {
           id: Number(cand.dropStop.id),
@@ -472,9 +567,12 @@ class BusRouteSearchService {
           stop_order: Number(cand.dropStop.stop_sequence || 2),
           latitude: parseFloat(cand.dropStop.latitude),
           longitude: parseFloat(cand.dropStop.longitude),
+          distance: dDistMeters,
+          distance_km: dDistKmVal,
         },
-        pickup_distance: cand.pickupDistKm ? Math.round(cand.pickupDistKm * 1000) : 0,
-        dropoff_distance: cand.dropDistKm ? Math.round(cand.dropDistKm * 1000) : 0,
+        pickup_distance: pDistMeters,
+        dropoff_distance: dDistMeters,
+        distance_km: pDistKmVal,
         duration_minutes: cand.durationMinutes,
         fare: {
           amount: cand.fareAmount,
@@ -499,8 +597,8 @@ class BusRouteSearchService {
     const allValidTimings = [];
 
     finalCandidates.forEach((cand, idx) => {
-      const pDistInfo = formatDistance(cand.pickupDistKm);
-      const dDistInfo = formatDistance(cand.dropDistKm);
+      const pDistInfo = formatDistance(cand.pickupDistKm || (topResolvedPickup?.distance ? topResolvedPickup.distance / 1000 : 0));
+      const dDistInfo = formatDistance(cand.dropDistKm || (topResolvedDropoff?.distance ? topResolvedDropoff.distance / 1000 : 0));
 
       cand.schedules.forEach((sch) => {
         const timingEntry = {
@@ -564,12 +662,12 @@ class BusRouteSearchService {
       });
     });
 
-    // Generate upcoming dates
+    // Generate upcoming dates dynamically based on actual scheduled trips
     const availableDates = [];
     const searchDateObj = new Date(travelDate);
     const baseDate = isNaN(searchDateObj.getTime()) ? new Date() : searchDateObj;
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 7; i++) {
       const dObj = new Date(baseDate);
       dObj.setDate(baseDate.getDate() + i);
 
@@ -578,13 +676,23 @@ class BusRouteSearchService {
       const dd = String(dObj.getDate()).padStart(2, '0');
       const formattedDateStr = `${yyyy}-${mm}-${dd}`;
 
+      let totalTimingsForDate = 0;
+      if (formattedDateStr === travelDate) {
+        totalTimingsForDate = allValidTimings.length;
+      } else {
+        finalCandidates.forEach((cand) => {
+          const matchingForDate = (cand.rawSchedules || []).filter((sch) => scheduleCanRunOnDate(sch, formattedDateStr));
+          totalTimingsForDate += matchingForDate.length;
+        });
+      }
+
       availableDates.push({
         date: formattedDateStr,
         day: dObj.toLocaleString('en-US', { weekday: 'short' }),
         month: dObj.toLocaleString('en-US', { month: 'short' }),
         day_number: String(dObj.getDate()),
         is_selected: formattedDateStr === travelDate,
-        total_timings: allValidTimings.length,
+        total_timings: totalTimingsForDate,
       });
     }
 

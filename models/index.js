@@ -18,6 +18,7 @@ const BusSchedule = require('./BusSchedule');
 const BusDriverAssignment = require('./BusDriverAssignment');
 const Route = require('./Route');
 const Stop = require('./Stop');
+const RouteStop = require('./RouteStop');
 const Trip = require('./Trip');
 const Passenger = require('./Passenger');
 const Booking = require('./Booking');
@@ -88,6 +89,16 @@ VehicleDocument.belongsTo(Vehicle, { foreignKey: 'vehicle_id', as: 'vehicle' });
 // ─── Route & Stop Associations ───────────────────────────
 Route.hasMany(Stop, { foreignKey: 'route_id', as: 'stops', onDelete: 'CASCADE' });
 Stop.belongsTo(Route, { foreignKey: 'route_id', as: 'route' });
+
+Route.belongsToMany(Stop, { through: RouteStop, foreignKey: 'route_id', otherKey: 'stop_id', as: 'physical_stops' });
+Stop.belongsToMany(Route, { through: RouteStop, foreignKey: 'stop_id', otherKey: 'route_id', as: 'routes' });
+
+Route.hasMany(RouteStop, { foreignKey: 'route_id', as: 'route_stops', onDelete: 'CASCADE' });
+RouteStop.belongsTo(Route, { foreignKey: 'route_id', as: 'route' });
+
+Stop.hasMany(RouteStop, { foreignKey: 'stop_id', as: 'route_stops', onDelete: 'CASCADE' });
+RouteStop.belongsTo(Stop, { foreignKey: 'stop_id', as: 'stop' });
+
 Route.hasMany(RateChart, { foreignKey: 'route_id', as: 'rate_charts', onDelete: 'CASCADE' });
 RateChart.belongsTo(Route, { foreignKey: 'route_id', as: 'route' });
 RateChart.belongsTo(Stop, { foreignKey: 'origin_stop_id', as: 'origin_stop' });
@@ -168,6 +179,7 @@ module.exports = {
   BusDriverAssignment,
   Route,
   Stop,
+  RouteStop,
   Trip,
   Passenger,
   Booking,

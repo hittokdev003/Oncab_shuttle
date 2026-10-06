@@ -8,6 +8,7 @@ const { resolveFare } = require('../utils/fareCalculator');
 const { calculateCouponDiscount } = require('../utils/coupon');
 const BusStopSearchService = require('../services/busStopSearchService');
 const BusRouteSearchService = require('../services/busRouteSearchService');
+const SeatReservationService = require('../services/seatReservationService');
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -1276,8 +1277,33 @@ exports.createBooking = async (req, res, next) => {
       return res.status(404).json({ status: 404, success: false, message: 'Trip not found' });
     }
 
+    const rawSeatInput = seat_numbers || body.seat_number || body.seats;
+    const requestedSeats = SeatReservationService.parseSeatNumbers(rawSeatInput);
+
+    if (requestedSeats.length > 0) {
+      const conflictRes = await SeatReservationService.checkSeatConflict({
+        tripId: trip.id,
+        travelDate: travel_date || trip.trip_date,
+        requestedSeats,
+        transaction: t,
+      });
+
+      if (conflictRes.hasConflict) {
+        await t.rollback();
+        return res.status(409).json({
+          success: false,
+          message: `Seat ${conflictRes.conflictingSeat} is already booked`,
+          code: 'SEAT_ALREADY_BOOKED',
+          data: {
+            trip_id: Number(trip.id),
+            seat_number: conflictRes.conflictingSeat,
+          },
+        });
+      }
+    }
+
     const effectiveCapacity = trip.vehicle?.total_seats || trip.bus_type?.total_seats || trip.seat_capacity || 30;
-    const numSeats = total_seats || (Array.isArray(seat_numbers) ? seat_numbers.length : 1);
+    const numSeats = total_seats || (requestedSeats.length > 0 ? requestedSeats.length : 1);
     const available = effectiveCapacity - (trip.booked_seats || 0);
     if (available < numSeats) {
       await t.rollback();

@@ -236,6 +236,12 @@ const TripsPage = React.lazy(() =>
   }))
 );
 
+const StopsPage = React.lazy(() =>
+  import('./pages/StopsPage').then(m => ({
+    default: m.StopsPage
+  }))
+);
+
 const LocationPage = React.lazy(() =>
   import('./pages/LocationPage').then(m => ({
     default: m.LocationPage
@@ -650,10 +656,7 @@ const AppInner: React.FC = () => {
       case 'stops':
         return (
           <PageWrapper>
-            <RouteCreationPage
-              {...props}
-              showStops
-            />
+            <StopsPage {...props} />
           </PageWrapper>
         );
 

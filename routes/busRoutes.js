@@ -54,6 +54,7 @@ router.post('/booking-details', busController.getBookingDetails);
 // Create / Book Ticket
 router.post('/create-booking', busController.createBooking);
 router.post('/book-ticket', busController.createBooking);
+router.post('/book', busController.createBooking);
 
 // PayU checkout and signed hosted-checkout callback
 router.post('/payment/payu/initiate', payuController.initiate);

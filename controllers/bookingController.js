@@ -6,6 +6,8 @@ const { Booking, Trip, CustomerUser, Stop, Payment, Refund, Coupon, CouponUsage,
 const { logAction } = require('../middleware/auditLog');
 const sequelize = require('../config/database');
 const { calculateCouponDiscount } = require('../utils/coupon');
+const { resolveFare } = require('../utils/fareCalculator');
+const SeatReservationService = require('../services/seatReservationService');
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -66,9 +68,33 @@ exports.create = async (req, res, next) => {
     });
     if (!trip) { await t.rollback(); return res.status(404).json({ success: false, message: 'Trip not found' }); }
 
+    const requestedSeats = SeatReservationService.parseSeatNumbers(seat_numbers || req.body.seat_number || req.body.seats);
+    if (requestedSeats.length > 0) {
+      const conflictRes = await SeatReservationService.checkSeatConflict({
+        tripId: trip.id,
+        travelDate: travel_date || trip.trip_date,
+        requestedSeats,
+        transaction: t,
+      });
+
+      if (conflictRes.hasConflict) {
+        await t.rollback();
+        return res.status(409).json({
+          success: false,
+          message: `Seat ${conflictRes.conflictingSeat} is already booked`,
+          code: 'SEAT_ALREADY_BOOKED',
+          data: {
+            trip_id: Number(trip.id),
+            seat_number: conflictRes.conflictingSeat,
+          },
+        });
+      }
+    }
+
     const effectiveCapacity = trip.vehicle?.total_seats || trip.bus_type?.total_seats || 30;
+    const numSeats = total_seats || (requestedSeats.length > 0 ? requestedSeats.length : 1);
     const available = effectiveCapacity - (trip.booked_seats || 0);
-    if (available < (total_seats || 1)) { await t.rollback(); return res.status(409).json({ success: false, message: `Only ${available} seats available` }); }
+    if (available < numSeats) { await t.rollback(); return res.status(409).json({ success: false, message: `Only ${available} seats available` }); }
 
     const fareResult = await resolveFare({
       routeId: trip.route_id,

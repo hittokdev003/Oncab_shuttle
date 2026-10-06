@@ -131,9 +131,21 @@ export const routesAPI = {
   create: (data: object) => api.post('/routes', data),
   update: (id: number, data: object) => api.put(`/routes/${id}`, data),
   delete: (id: number) => api.delete(`/routes/${id}`),
+  duplicate: (id: number, data?: object) => api.post(`/routes/${id}/duplicate`, data),
+  reverse: (id: number, data?: object) => api.post(`/routes/${id}/reverse`, data),
   addStop: (routeId: number, data: object) => api.post(`/routes/${routeId}/stops`, data),
   updateStop: (routeId: number, stopId: number, data: object) => api.put(`/routes/${routeId}/stops/${stopId}`, data),
   deleteStop: (routeId: number, stopId: number) => api.delete(`/routes/${routeId}/stops/${stopId}`),
+};
+
+export const stopsAPI = {
+  list: (params?: object) => api.get('/routes/stops', { params }),
+  show: (id: number) => api.get(`/routes/stops/${id}`),
+  search: (q: string) => api.get('/routes/stops/search', { params: { q } }),
+  nearbyCheck: (lat: number, lng: number, radius = 100) => api.get('/routes/stops/nearby-check', { params: { lat, lng, radius } }),
+  create: (data: object) => api.post('/routes/stops', data),
+  update: (id: number, data: object) => api.put(`/routes/stops/${id}`, data),
+  delete: (id: number) => api.delete(`/routes/stops/${id}`),
 };
 
 export const tripsAPI = {
