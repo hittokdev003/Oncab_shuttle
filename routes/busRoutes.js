@@ -24,6 +24,10 @@ router.post('/search-routes', busController.searchRoutes);
 router.get('/search', busController.searchRoutes);
 router.post('/search', busController.searchRoutes);
 
+// Search Stops Suggestions (Cityflo-style)
+router.get('/search-stops', busController.searchStops);
+router.post('/search-stops', busController.searchStops);
+
 // Schedules
 router.get('/schedules', busController.getSchedules);
 router.post('/schedules', busController.getSchedules);

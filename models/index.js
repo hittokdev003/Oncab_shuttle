@@ -68,6 +68,8 @@ BusType.hasMany(Vehicle, { foreignKey: 'bus_type_id', as: 'vehicles' });
 // ─── Bus Schedule & Driver Assignment ────────────────────
 BusRoute.hasMany(BusStop, { foreignKey: 'route_id', as: 'stops' });
 BusStop.belongsTo(BusRoute, { foreignKey: 'route_id', as: 'route' });
+BusRoute.hasMany(BusSchedule, { foreignKey: 'route_id', as: 'schedules' });
+BusSchedule.belongsTo(BusRoute, { foreignKey: 'route_id', as: 'bus_route' });
 Route.hasMany(BusSchedule, { foreignKey: 'route_id', as: 'schedules' });
 BusSchedule.belongsTo(Route, { foreignKey: 'route_id', as: 'route' });
 BusSchedule.belongsTo(Route, { foreignKey: 'route_id', as: 'main_route' });

@@ -6,6 +6,8 @@ const { BusType, BusRoute, BusSchedule, BusStop, Trip, Booking, Vehicle, Stop, R
 const sequelize = require('../config/database');
 const { resolveFare } = require('../utils/fareCalculator');
 const { calculateCouponDiscount } = require('../utils/coupon');
+const BusStopSearchService = require('../services/busStopSearchService');
+const BusRouteSearchService = require('../services/busRouteSearchService');
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -367,6 +369,7 @@ const fetchSchedulesForRouteStopPair = async ({ routeId, pickupStopId, dropStopI
 };
 
 // ── 3. Search Routes with Filters ─────────────────────────────
+// ── 3. Search Routes with Filters (Cityflo-Style Location-First & Alias Aware) ───
 exports.searchRoutes = async (req, res, next) => {
   try {
     const rawPickupObj = req.body?.pickup ?? req.query?.pickup;
@@ -390,33 +393,24 @@ exports.searchRoutes = async (req, res, next) => {
     let dLat = dLatRaw !== undefined && dLatRaw !== null && dLatRaw !== '' ? parseFloat(dLatRaw) : NaN;
     let dLng = dLngRaw !== undefined && dLngRaw !== null && dLngRaw !== '' ? parseFloat(dLngRaw) : NaN;
 
-    // Extract names from pickup_name/dropoff_name or pickup/dropoff if string or pickup.name/dropoff.name
     let rawPickupName = req.body?.pickup_name || req.query?.pickup_name || req.body?.pickup_location || req.query?.pickup_location;
     if (!rawPickupName && typeof rawPickupObj === 'string') rawPickupName = rawPickupObj;
     if (!rawPickupName && typeof rawPickupObj === 'object' && rawPickupObj !== null && typeof rawPickupObj.name === 'string') rawPickupName = rawPickupObj.name;
-    if (!rawPickupName && !isNaN(pLat) && !isNaN(pLng)) rawPickupName = 'Pickup Location';
 
     let rawDropoffName = req.body?.dropoff_name || req.query?.dropoff_name || req.body?.dropoff_location || req.query?.dropoff_location;
     if (!rawDropoffName && typeof rawDropoffObj === 'string') rawDropoffName = rawDropoffObj;
     if (!rawDropoffName && typeof rawDropoffObj === 'object' && rawDropoffObj !== null && typeof rawDropoffObj.name === 'string') rawDropoffName = rawDropoffObj.name;
-    if (!rawDropoffName && !isNaN(dLat) && !isNaN(dLng)) rawDropoffName = 'Dropoff Location';
 
-    const rawPickup = rawPickupName;
-    const rawDropoff = rawDropoffName;
+    const pStopId = req.body?.pickup?.stop_id || req.query?.pickup?.stop_id || req.body?.pickup_stop_id || req.query?.pickup_stop_id || null;
+    const dStopId = req.body?.dropoff?.stop_id || req.query?.dropoff?.stop_id || req.body?.drop_stop_id || req.query?.drop_stop_id || null;
 
-    // STEP 1: Strict Validation - Required fields check
+    // Validation check
     const errors = {};
-    if (isNaN(pLat) || isNaN(pLng)) {
-      errors.pickup = 'Pickup latitude and longitude coordinates are required';
+    if (!pStopId && isNaN(pLat) && !rawPickupName) {
+      errors.pickup = 'Pickup latitude and longitude coordinates or valid stop_id/name are required';
     }
-    if (isNaN(dLat) || isNaN(dLng)) {
-      errors.dropoff = 'Dropoff latitude and longitude coordinates are required';
-    }
-    if (!rawPickup || typeof rawPickup !== 'string' || !rawPickup.trim()) {
-      errors.pickup_name = 'Pickup location name is required';
-    }
-    if (!rawDropoff || typeof rawDropoff !== 'string' || !rawDropoff.trim()) {
-      errors.dropoff_name = 'Dropoff location name is required';
+    if (!dStopId && isNaN(dLat) && !rawDropoffName) {
+      errors.dropoff = 'Dropoff latitude and longitude coordinates or valid stop_id/name are required';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -430,313 +424,37 @@ exports.searchRoutes = async (req, res, next) => {
     const travelDate = req.body?.date || req.query?.date || req.body?.travel_date || req.query?.travel_date || new Date().toISOString().split('T')[0];
     const rawPassengers = req.body?.passengers ?? req.query?.passengers;
     const passengers = parseInt(rawPassengers !== undefined ? rawPassengers : 1, 10);
+    const busTypeId = req.body?.bus_type_id || req.query?.bus_type_id || null;
 
-    const pickupStr = rawPickup.trim();
-    const dropoffStr = rawDropoff.trim();
+    const pickupInput = {
+      stop_id: pStopId,
+      name: rawPickupName || 'Pickup Location',
+      latitude: !isNaN(pLat) ? pLat : null,
+      longitude: !isNaN(pLng) ? pLng : null,
+    };
 
-    console.log(`[SEARCH] Request passengers: ${passengers}, date: ${travelDate}, pickup: "${pickupStr}", dropoff: "${dropoffStr}"`);
+    const dropoffInput = {
+      stop_id: dStopId,
+      name: rawDropoffName || 'Dropoff Location',
+      latitude: !isNaN(dLat) ? dLat : null,
+      longitude: !isNaN(dLng) ? dLng : null,
+    };
 
-    // STEP 1: Validation
-    if (!validateCoordinates(pLat, pLng) || !validateCoordinates(dLat, dLng)) {
-      return res.status(422).json({
-        status: false,
-        message: 'Invalid pickup or dropoff latitude/longitude coordinates',
-        errors: {
-          pickup: { latitude: pLatRaw, longitude: pLngRaw },
-          dropoff: { latitude: dLatRaw, longitude: dLngRaw },
-        },
-      });
-    }
-
-    if (isNaN(passengers) || passengers < 1) {
-      return res.status(422).json({
-        status: false,
-        message: 'Passengers count must be an integer greater than or equal to 1',
-      });
-    }
-
-    // STEP 2 & 3: Find active routes and stops
-    let routes = await Route.findAll({
-      where: { status: 'Active', deleted_at: null },
-      include: [{ model: Stop, as: 'stops', required: false, where: { status: 'Active' } }],
+    const searchResult = await BusRouteSearchService.search({
+      pickupInput,
+      dropoffInput,
+      travelDateInput: travelDate,
+      passengersInput: passengers,
+      busTypeId,
     });
 
-    if (!routes || routes.length === 0) {
-      routes = await BusRoute.findAll({
-        where: { status: 'Active' },
-        include: [{ model: BusStop, as: 'stops', required: false, where: { status: 'Active' } }],
-      });
-    }
-
-    const validCandidates = [];
-
-    for (const route of routes) {
-      const stops = (route.stops || []).sort((a, b) => (a.stop_sequence || 0) - (b.stop_sequence || 0));
-      if (stops.length < 2) continue;
-
-      let bestPickupStop = null;
-      let minPickupDistKm = Infinity;
-
-      stops.forEach((s) => {
-        const sLat = parseFloat(s.latitude);
-        const sLng = parseFloat(s.longitude);
-        if (!isNaN(sLat) && !isNaN(sLng)) {
-          const distKm = calcHaversineDistanceKm(pLat, pLng, sLat, sLng);
-          if (distKm <= PICKUP_SEARCH_RADIUS_KM && distKm < minPickupDistKm) {
-            minPickupDistKm = distKm;
-            bestPickupStop = s;
-          }
-        }
-      });
-
-      if (!bestPickupStop) {
-        console.log(`[REJECTION] No pickup stop within ${PICKUP_SEARCH_RADIUS_KM}km for route ${route.id}`);
-        continue;
-      }
-
-      const pSeq = Number(bestPickupStop.stop_sequence || 1);
-
-      let bestDropStop = null;
-      let minDropDistKm = Infinity;
-
-      stops.forEach((s) => {
-        const sSeq = Number(s.stop_sequence || 0);
-        if (sSeq > pSeq && s.id !== bestPickupStop.id) {
-          const sLat = parseFloat(s.latitude);
-          const sLng = parseFloat(s.longitude);
-          if (!isNaN(sLat) && !isNaN(sLng)) {
-            const distKm = calcHaversineDistanceKm(dLat, dLng, sLat, sLng);
-            if (distKm <= DROPOFF_SEARCH_RADIUS_KM && distKm < minDropDistKm) {
-              minDropDistKm = distKm;
-              bestDropStop = s;
-            }
-          }
-        }
-      });
-
-      if (!bestDropStop) {
-        console.log(`[REJECTION] DROP_STOP_TOO_FAR for route ${route.id}: No drop stop within ${DROPOFF_SEARCH_RADIUS_KM}km after pickup sequence ${pSeq}`);
-        continue;
-      }
-
-      const scheduleRes = await fetchSchedulesForRouteStopPair({
-        routeId: route.id,
-        pickupStopId: bestPickupStop.id,
-        dropStopId: bestDropStop.id,
-        travelDate,
-        passengers,
-      });
-
-      if (scheduleRes.success && scheduleRes.schedules.length > 0) {
-        validCandidates.push({
-          route,
-          pickupStop: bestPickupStop,
-          dropStop: bestDropStop,
-          pickupDistKm: minPickupDistKm,
-          dropDistKm: minDropDistKm,
-          schedules: scheduleRes.schedules,
-          durationMinutes: scheduleRes.durationMinutes,
-          fareAmount: scheduleRes.fareAmount,
-        });
-      }
-    }
-
-    // STEP 14: Top Pick Deterministic Ranking
-    validCandidates.sort((a, b) => {
-      if (Math.abs(a.dropDistKm - b.dropDistKm) > 0.1) return a.dropDistKm - b.dropDistKm;
-      if (Math.abs(a.pickupDistKm - b.pickupDistKm) > 0.1) return a.pickupDistKm - b.pickupDistKm;
-      const aMinPickupTime = Math.min(...a.schedules.map((s) => s.pickupMins || 0));
-      const bMinPickupTime = Math.min(...b.schedules.map((s) => s.pickupMins || 0));
-      if (aMinPickupTime !== bMinPickupTime) return aMinPickupTime - bMinPickupTime;
-      if (a.durationMinutes !== b.durationMinutes) return a.durationMinutes - b.durationMinutes;
-      return a.fareAmount - b.fareAmount;
-    });
-
-    const pickupGroupMap = new Map();
-    let allValidTimings = [];
-    let topPickItem = null;
-
-    validCandidates.forEach((cand, idx) => {
-      const pDistInfo = formatDistanceAndLabel(cand.pickupDistKm);
-      const dDistInfo = formatDistanceAndLabel(cand.dropDistKm);
-
-      cand.schedules.forEach((sch) => {
-        const timingEntry = {
-          schedule_id: sch.schedule_id,
-          route_id: sch.route_id,
-          pickup_time: sch.pickup_time,
-          drop_time: sch.drop_time,
-          drop_stop: sch.drop_stop.name,
-          drop_stop_id: sch.drop_stop.id,
-          fare: sch.fare.amount,
-          fare_display: sch.fare.display,
-          available_seats: sch.available_seats,
-          status: sch.status,
-        };
-
-        allValidTimings.push(timingEntry);
-
-        if (!topPickItem && idx === 0) {
-          topPickItem = {
-            route_id: sch.route_id,
-            schedule_id: sch.schedule_id,
-            pickup_stop: {
-              id: cand.pickupStop.id,
-              name: cand.pickupStop.stop_name || cand.pickupStop.name,
-              address: cand.pickupStop.address || cand.pickupStop.landmark || '',
-              latitude: parseFloat(cand.pickupStop.latitude || pLat),
-              longitude: parseFloat(cand.pickupStop.longitude || pLng),
-              ...pDistInfo,
-            },
-            pickup_time: sch.pickup_time,
-            drop_stop: {
-              id: cand.dropStop.id,
-              name: cand.dropStop.stop_name || cand.dropStop.name,
-              address: cand.dropStop.address || cand.dropStop.landmark || '',
-              latitude: parseFloat(cand.dropStop.latitude || dLat),
-              longitude: parseFloat(cand.dropStop.longitude || dLng),
-              ...dDistInfo,
-            },
-            drop_time: sch.drop_time,
-            duration_minutes: cand.durationMinutes,
-            fare: sch.fare,
-            available_seats: sch.available_seats,
-          };
-        }
-
-        const pStopId = cand.pickupStop.id;
-        if (!pickupGroupMap.has(pStopId)) {
-          pickupGroupMap.set(pStopId, {
-            pickup_stop: {
-              id: cand.pickupStop.id,
-              name: cand.pickupStop.stop_name || cand.pickupStop.name,
-              ...pDistInfo,
-            },
-            timings_count: 0,
-            timings: [],
-          });
-        }
-        const group = pickupGroupMap.get(pStopId);
-        group.timings.push(timingEntry);
-        group.timings_count = group.timings.length;
-      });
-    });
-
-    const pickupGroups = Array.from(pickupGroupMap.values());
-
-    // STEP 17: Available Dates calculation
-    const availableDates = [];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    const searchDateObj = new Date(travelDate);
-    const baseDate = isNaN(searchDateObj.getTime()) ? new Date() : searchDateObj;
-
-    for (let i = 0; i < 4; i++) {
-      const dObj = new Date(baseDate);
-      dObj.setDate(baseDate.getDate() + i);
-
-      const yyyy = dObj.getFullYear();
-      const mm = String(dObj.getMonth() + 1).padStart(2, '0');
-      const dd = String(dObj.getDate()).padStart(2, '0');
-      const formattedDateStr = `${yyyy}-${mm}-${dd}`;
-
-      let dateTimingsCount = 0;
-      for (const cand of validCandidates) {
-        const dRes = await fetchSchedulesForRouteStopPair({
-          routeId: cand.route.id,
-          pickupStopId: cand.pickupStop.id,
-          dropStopId: cand.dropStop.id,
-          travelDate: formattedDateStr,
-          passengers,
-        });
-        if (dRes.success) {
-          dateTimingsCount += dRes.schedules.length;
-        }
-      }
-
-      if (dateTimingsCount > 0) {
-        const dNum = dObj.getDate();
-        let suffix = 'th';
-        if (dNum % 10 === 1 && dNum !== 11) suffix = 'st';
-        else if (dNum % 10 === 2 && dNum !== 12) suffix = 'nd';
-        else if (dNum % 10 === 3 && dNum !== 13) suffix = 'rd';
-
-        const label = `${days[dObj.getDay()]}, ${dNum}${suffix} ${months[dObj.getMonth()]}`;
-
-        availableDates.push({
-          date: formattedDateStr,
-          label,
-          timings_count: dateTimingsCount,
-        });
-      }
-    }
-
-    const uniqueRouteIds = new Set(validCandidates.map((c) => c.route.id));
-    const uniquePickupStopIds = new Set(validCandidates.map((c) => c.pickupStop.id));
-
-    // STEP 23: Empty Results Response if no valid timings found
-    if (allValidTimings.length === 0) {
-      return res.json({
-        status: true,
-        message: 'No shuttle timings found',
-        search: {
-          pickup: {
-            name: pickupStr,
-            latitude: pLat,
-            longitude: pLng,
-          },
-          dropoff: {
-            name: dropoffStr,
-            latitude: dLat,
-            longitude: dLng,
-          },
-          date: travelDate,
-          passengers,
-        },
-        summary: {
-          total_routes: 0,
-          total_pickup_groups: 0,
-          total_timings: 0,
-          total_valid_results: 0,
-        },
-        top_pick: null,
-        pickup_groups: [],
-        available_dates: availableDates,
-      });
-    }
-
-    return res.json({
-      status: true,
-      message: 'Shuttle timings found',
-      search: {
-        pickup: {
-          name: pickupStr,
-          latitude: pLat,
-          longitude: pLng,
-        },
-        dropoff: {
-          name: dropoffStr,
-          latitude: dLat,
-          longitude: dLng,
-        },
-        date: travelDate,
-        passengers,
-      },
-      summary: {
-        total_routes: uniqueRouteIds.size,
-        total_pickup_groups: uniquePickupStopIds.size,
-        total_timings: allValidTimings.length,
-        total_valid_results: allValidTimings.length,
-      },
-      top_pick: topPickItem,
-      pickup_groups: pickupGroups,
-      available_dates: availableDates,
-    });
+    res.json(searchResult);
   } catch (err) {
     next(err);
   }
 };
+
+exports.searchStops = BusStopSearchService.searchStopsSuggestions;
 
 // ── 4. Get Schedules ──────────────────────────────────────────
 exports.getSchedules = async (req, res, next) => {
@@ -835,8 +553,9 @@ exports.getSchedules = async (req, res, next) => {
       where,
       include: [
         { model: BusType, as: 'bus_type', required: false },
+        { model: Route, as: 'route', include: [{ model: Stop, as: 'stops', required: false }], required: false },
         { model: Route, as: 'main_route', include: [{ model: Stop, as: 'stops', required: false }], required: false },
-        { model: BusRoute, as: 'route', include: [{ model: BusStop, as: 'stops', required: false }], required: false },
+        { model: BusRoute, as: 'bus_route', include: [{ model: BusStop, as: 'stops', required: false }], required: false },
       ],
       order: [['trip_date', 'ASC'], ['departure_time', 'ASC']],
     });
@@ -899,10 +618,13 @@ exports.getSchedules = async (req, res, next) => {
 
     const formattedSchedules = (schedules || []).map((s) => {
       const item = s.toJSON();
-      if (item.main_route) {
-        item.route = item.main_route;
-        delete item.main_route;
+      if (!item.route && item.bus_route) {
+        item.route = item.bus_route;
       }
+      if (!item.route && item.main_route) {
+        item.route = item.main_route;
+      }
+      delete item.main_route;
 
       // Dynamic seat_capacity from vehicle total_seats or bus_type total_seats
       if (item.vehicle && item.vehicle.total_seats) {
@@ -950,8 +672,9 @@ exports.checkSeatAvailability = async (req, res, next) => {
     let schedule = await BusSchedule.findByPk(schedule_id, {
       include: [
         { model: BusType, as: 'bus_type', required: false },
+        { model: Route, as: 'route', include: [{ model: Stop, as: 'stops', required: false }], required: false },
         { model: Route, as: 'main_route', include: [{ model: Stop, as: 'stops', required: false }], required: false },
-        { model: BusRoute, as: 'route', include: [{ model: BusStop, as: 'stops', required: false }], required: false },
+        { model: BusRoute, as: 'bus_route', include: [{ model: BusStop, as: 'stops', required: false }], required: false },
       ],
     });
 
