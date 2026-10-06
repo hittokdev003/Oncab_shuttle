@@ -11,7 +11,7 @@ const BusSchedule = sequelize.define('BusSchedule', {
   bus_number: {
     type: DataTypes.VIRTUAL,
     get() {
-      return this.schedule_code;
+      return this.vehicle?.registration_number || null;
     },
   },
   departure_time: { type: DataTypes.TIME, allowNull: false },

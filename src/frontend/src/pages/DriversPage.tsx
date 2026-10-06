@@ -30,7 +30,7 @@ interface DriversPageProps {
   onNotify: (msg: string, type?: any) => void;
 }
 
-const HEADERS = ['Driver', 'Mobile / Email', 'Aadhar / PAN', 'Documents', 'Doc Status', 'Status', 'Online', 'Block', 'Joined', 'Actions'];
+const HEADERS = ['Driver', 'Mobile / Email', 'Aadhar / Driving License', 'Documents', 'Doc Status', 'Status', 'Online', 'Block', 'Joined', 'Actions'];
 const STATUS_OPTIONS = [
   { value: 'Approve', label: 'Approved' },
   { value: 'Disapprove', label: 'Disapproved' },
@@ -64,7 +64,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
   // Form matching requested fields:
-  // Full Name, Mobile, Email, Gender, Aadhar Number, Aadhar Photo, PAN Number, PAN Photo, Address, Status
+  // Full Name, Mobile, Email, Gender, Aadhar Number, Aadhar Photo, Driving License Number, Driving License Photo, Address, Status
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -305,7 +305,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Search name, mobile, aadhar, PAN, ID..."
+          placeholder="Search name, mobile, aadhar, Driving License, ID..."
         />
         <Select
           value={statusFilter}
@@ -368,7 +368,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                           {driver.aadhar || driver.details?.aadhar || '—'}
                         </div>
                         <div className="text-slate-400">
-                          <span className="text-slate-500 mr-1">PAN:</span>
+                          <span className="text-slate-500 mr-1">Driving License:</span>
                           {driver.pan || driver.details?.smart_card_number || '—'}
                         </div>
                       </div>
@@ -413,16 +413,16 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                             onClick={() =>
                               setPreviewImage({
                                 url: panImg,
-                                title: `${driver.name} - PAN Document`,
+                                title: `${driver.name} - Driving License Document`,
                               })
                             }
                             className="group relative flex items-center gap-1.5 px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:border-indigo-500 hover:bg-slate-750 transition-all text-xs text-slate-300"
-                            title="Click to view full PAN Card"
+                            title="Click to view full Driving License"
                           >
                             <div className="w-5 h-5 rounded overflow-hidden bg-slate-900 border border-slate-700 flex-shrink-0 flex items-center justify-center">
                               <img
                                 src={panImg}
-                                alt="PAN"
+                                alt="Driving License"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
                                   // Fallback if image data is truncated
@@ -431,11 +431,11 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                               />
                               <FileText size={12} className="text-cyan-400" />
                             </div>
-                            <span className="font-mono text-[11px] text-slate-200">PAN</span>
+                            <span className="font-mono text-[11px] text-slate-200">Driving License</span>
                             <Eye size={12} className="text-slate-400 group-hover:text-cyan-400 transition-colors" />
                           </button>
                         ) : (
-                          <span className="text-[11px] text-slate-600">No PAN</span>
+                          <span className="text-[11px] text-slate-600">No Driving License</span>
                         )}
                       </div>
                     </Td>
@@ -743,7 +743,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3.5 bg-slate-800/50 border border-slate-700/60 rounded-xl">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">
-                    PAN Number
+                    Driving License Number
                   </label>
                   <input
                     type="text"
@@ -755,13 +755,13 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">
-                    PAN Photo (Card / Document)
+                    Driving License Photo (Card / Document)
                   </label>
                   <div className="flex items-center gap-2">
                     <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 border border-dashed border-slate-600 hover:border-indigo-500 rounded-lg text-xs text-slate-300 cursor-pointer transition-colors truncate">
                       <Upload size={14} className="text-indigo-400 flex-shrink-0" />
                       <span className="truncate">
-                        {form.pan_img ? 'Change PAN' : 'Upload PAN Image'}
+                        {form.pan_img ? 'Change Driving License' : 'Upload Driving License Image'}
                       </span>
                       <input
                         type="file"
@@ -777,7 +777,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                           onClick={() =>
                             setPreviewImage({
                               url: form.pan_img,
-                              title: `${form.name || 'Driver'} - PAN Document`,
+                              title: `${form.name || 'Driver'} - Driving License Document`,
                             })
                           }
                           className="w-10 h-10 rounded-lg overflow-hidden border border-emerald-500/60 flex-shrink-0 relative block"
@@ -785,7 +785,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                         >
                           <img
                             src={form.pan_img}
-                            alt="PAN"
+                            alt="Driving License"
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">

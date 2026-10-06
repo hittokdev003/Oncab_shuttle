@@ -213,6 +213,7 @@ const fetchSchedulesForRouteStopPair = async ({ routeId, pickupStopId, dropStopI
     where: { route_id: route.id, status: 'Active' },
     include: [
       { model: BusType, as: 'bus_type', required: false },
+      { model: Vehicle, as: 'vehicle', required: false },
     ],
     order: [['departure_time', 'ASC']],
   });
@@ -554,6 +555,7 @@ exports.getSchedules = async (req, res, next) => {
       where,
       include: [
         { model: BusType, as: 'bus_type', required: false },
+        { model: Vehicle, as: 'vehicle', required: false },
         { model: Route, as: 'route', include: [{ model: Stop, as: 'stops', required: false }], required: false },
         { model: Route, as: 'main_route', include: [{ model: Stop, as: 'stops', required: false }], required: false },
         { model: BusRoute, as: 'bus_route', include: [{ model: BusStop, as: 'stops', required: false }], required: false },
