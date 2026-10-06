@@ -2,9 +2,10 @@
 
 const { Op, fn, col } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
-const { Booking, Trip, CustomerUser, Stop, Payment, Refund, Coupon, Route, Vehicle, Driver } = require('../models');
+const { Booking, Trip, CustomerUser, Stop, Payment, Refund, Coupon, CouponUsage, Route, Vehicle, Driver } = require('../models');
 const { logAction } = require('../middleware/auditLog');
 const sequelize = require('../config/database');
+const { calculateCouponDiscount } = require('../utils/coupon');
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -54,7 +55,7 @@ exports.show = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { trip_id, passenger_id, passenger_name, passenger_mobile, passenger_email, origin_stop_id, destination_stop_id, travel_date, seat_numbers, total_seats, payment_method, coupon_id, special_requests } = req.body;
+    const { trip_id, passenger_id, passenger_name, passenger_mobile, passenger_email, origin_stop_id, destination_stop_id, travel_date, seat_numbers, total_seats, payment_method, coupon_id, coupon_code, device_id, special_requests } = req.body;
 
     const trip = await Trip.findByPk(trip_id, {
       include: [
@@ -78,14 +79,26 @@ exports.create = async (req, res, next) => {
     });
     let total_fare = (fareResult.fare || 0) * (total_seats || 1);
     let discount_amount = 0;
+    let appliedCoupon = null;
 
-    if (coupon_id) {
-      const coupon = await Coupon.findByPk(coupon_id, { transaction: t });
-      if (coupon && coupon.status === 'Active') {
-        if (coupon.code_type === 'FLAT') discount_amount = Math.min(coupon.amount, total_fare);
-        else discount_amount = Math.min((total_fare * coupon.amount) / 100, coupon.max_discount || Infinity);
-        await coupon.increment('used_count', { transaction: t });
+    if (coupon_id || coupon_code) {
+      const couponResult = await calculateCouponDiscount({
+        couponId: coupon_id,
+        couponCode: coupon_code,
+        amount: total_fare,
+        seatCount: total_seats || 1,
+        passengerId: passenger_id,
+        deviceId: device_id,
+        transaction: t,
+        lock: true,
+      });
+      if (couponResult.error) {
+        await t.rollback();
+        return res.status(400).json({ success: false, message: couponResult.error });
       }
+      appliedCoupon = couponResult.coupon;
+      discount_amount = couponResult.discount;
+      await appliedCoupon.increment('used_count', { by: 1, transaction: t });
     }
 
     const final_amount = Math.max(0, total_fare - discount_amount);
@@ -94,8 +107,18 @@ exports.create = async (req, res, next) => {
     const boarding_pin = Math.floor(1000 + Math.random() * 9000).toString();
 
     const booking = await Booking.create({
-      booking_reference, trip_id, passenger_id, passenger_name, passenger_mobile, passenger_email, origin_stop_id, destination_stop_id, travel_date, seat_numbers, total_seats: total_seats || 1, total_fare, discount_amount, final_amount, payment_method, coupon_id, special_requests, boarding_pass_code, boarding_pin, booking_status: 'confirmed', payment_status: 'pending', qr_token: uuidv4(),
+      booking_reference, trip_id, passenger_id, passenger_name, passenger_mobile, passenger_email, origin_stop_id, destination_stop_id, travel_date, seat_numbers, total_seats: total_seats || 1, total_fare, discount_amount, final_amount, payment_method, coupon_id: appliedCoupon?.id || null, special_requests, boarding_pass_code, boarding_pin, booking_status: 'confirmed', payment_status: 'pending', qr_token: uuidv4(),
     }, { transaction: t });
+
+    if (appliedCoupon) {
+      await CouponUsage.create({
+        coupon_id: appliedCoupon.id,
+        booking_id: booking.id,
+        passenger_id,
+        device_id: device_id ? String(device_id).trim() : null,
+        discount_amount,
+      }, { transaction: t });
+    }
 
     await trip.increment('booked_seats', { by: total_seats || 1, transaction: t });
 

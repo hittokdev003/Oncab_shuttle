@@ -1,7 +1,8 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Coupon } = require('../models');
+const { Coupon, CouponUsage, CustomerUser, Booking } = require('../models');
+const { calculateCouponDiscount } = require('../utils/coupon');
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -23,6 +24,51 @@ exports.list = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.listAvailable = async (req, res, next) => {
+  try {
+    const { passenger_id, device_id } = req.query;
+    const amount = req.query.amount === undefined ? null : Number(req.query.amount);
+    const seatCount = req.query.seat_count === undefined ? 1 : Number(req.query.seat_count);
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
+      return res.status(400).json({ success: false, message: 'amount must be a valid non-negative number' });
+    }
+    if (!Number.isInteger(seatCount) || seatCount < 1) {
+      return res.status(400).json({ success: false, message: 'seat_count must be a positive integer' });
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const coupons = await Coupon.findAll({
+      where: {
+        status: 'Active',
+        [Op.and]: [
+          { [Op.or]: [{ start_date: null }, { start_date: { [Op.lte]: today } }] },
+          { [Op.or]: [{ end_date: null }, { end_date: { [Op.gte]: today } }] },
+        ],
+      },
+      attributes: ['id', 'code', 'code_type', 'amount', 'min_amount', 'max_discount', 'start_date', 'end_date', 'usage_limit', 'used_count', 'per_user_limit', 'per_device_limit', 'max_seats', 'description'],
+      order: [['created_at', 'DESC']],
+    });
+
+    const available = await Promise.all(coupons.map(async (coupon) => {
+      if (coupon.usage_limit !== null && Number(coupon.used_count) >= Number(coupon.usage_limit)) return null;
+      if (amount !== null && amount < Number(coupon.min_amount || 0)) return null;
+      if (Number(seatCount) > Number(coupon.max_seats || Number.MAX_SAFE_INTEGER)) return null;
+
+      if (passenger_id && Number(coupon.per_user_limit) > 0) {
+        const usedByPassenger = await CouponUsage.count({ where: { coupon_id: coupon.id, passenger_id } });
+        if (usedByPassenger >= Number(coupon.per_user_limit)) return null;
+      }
+      if (device_id && coupon.per_device_limit !== null && coupon.per_device_limit !== undefined) {
+        const usedByDevice = await CouponUsage.count({ where: { coupon_id: coupon.id, device_id: String(device_id).trim() } });
+        if (usedByDevice >= Number(coupon.per_device_limit)) return null;
+      }
+      return coupon;
+    }));
+
+    res.json({ success: true, data: available.filter(Boolean) });
+  } catch (err) { next(err); }
+};
+
 exports.show = async (req, res, next) => {
   try {
     const coupon = await Coupon.findByPk(req.params.id);
@@ -33,9 +79,10 @@ exports.show = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const exists = await Coupon.findOne({ where: { code: req.body.code } });
+    const payload = normalizeCouponPayload(req.body);
+    const exists = await Coupon.findOne({ where: { code: payload.code } });
     if (exists) return res.status(409).json({ success: false, message: 'Coupon code already exists' });
-    const coupon = await Coupon.create({ ...req.body, created_by: req.user?.id });
+    const coupon = await Coupon.create({ ...payload, created_by: req.user?.id });
     res.status(201).json({ success: true, message: 'Coupon created', data: coupon });
   } catch (err) { next(err); }
 };
@@ -44,7 +91,10 @@ exports.update = async (req, res, next) => {
   try {
     const coupon = await Coupon.findByPk(req.params.id);
     if (!coupon) return res.status(404).json({ success: false, message: 'Coupon not found' });
-    await coupon.update(req.body);
+    const payload = normalizeCouponPayload(req.body);
+    const duplicate = await Coupon.findOne({ where: { code: payload.code, id: { [Op.ne]: coupon.id } } });
+    if (duplicate) return res.status(409).json({ success: false, message: 'Coupon code already exists' });
+    await coupon.update(payload);
     res.json({ success: true, message: 'Coupon updated', data: coupon });
   } catch (err) { next(err); }
 };
@@ -60,16 +110,73 @@ exports.destroy = async (req, res, next) => {
 
 exports.validate = async (req, res, next) => {
   try {
-    const { code, amount } = req.body;
-    const coupon = await Coupon.findOne({ where: { code, status: 'Active' } });
-    if (!coupon) return res.status(404).json({ success: false, message: 'Invalid coupon code' });
-    if (coupon.end_date && new Date() > new Date(coupon.end_date)) return res.status(400).json({ success: false, message: 'Coupon has expired' });
-    if (coupon.usage_limit && coupon.used_count >= coupon.usage_limit) return res.status(400).json({ success: false, message: 'Coupon usage limit reached' });
-    if (amount < coupon.min_amount) return res.status(400).json({ success: false, message: `Minimum order amount is ₹${coupon.min_amount}` });
-
-    let discount = coupon.code_type === 'FLAT' ? parseFloat(coupon.amount) : (amount * parseFloat(coupon.amount)) / 100;
-    if (coupon.max_discount) discount = Math.min(discount, parseFloat(coupon.max_discount));
-
-    res.json({ success: true, message: 'Valid coupon', data: { coupon, discount: discount.toFixed(2), final_amount: (amount - discount).toFixed(2) } });
+    const { code, amount, passenger_id, device_id } = req.body;
+    const seatCount = Number(req.body.seat_count || 1);
+    if (!Number.isInteger(seatCount) || seatCount < 1) {
+      return res.status(400).json({ success: false, message: 'seat_count must be a positive integer' });
+    }
+    const result = await calculateCouponDiscount({ couponCode: code, amount, seatCount, passengerId: passenger_id, deviceId: device_id });
+    if (result.error) return res.status(400).json({ success: false, message: result.error });
+    res.json({ success: true, message: 'Valid coupon', data: { coupon: result.coupon, discount: result.discount.toFixed(2), final_amount: (Number(amount) - result.discount).toFixed(2) } });
   } catch (err) { next(err); }
+};
+
+exports.usages = async (req, res, next) => {
+  try {
+    const coupon = await Coupon.findByPk(req.params.id);
+    if (!coupon) return res.status(404).json({ success: false, message: 'Coupon not found' });
+    const { offset, limit, page } = buildPagination(req.query.page, req.query.limit);
+    const { count, rows } = await CouponUsage.findAndCountAll({
+      where: { coupon_id: coupon.id },
+      include: [
+        { model: CustomerUser, as: 'passenger', attributes: ['id', 'name', 'mobile', 'email'] },
+        { model: Booking, as: 'booking', attributes: ['id', 'booking_reference', 'travel_date', 'booking_status', 'payment_status'] },
+      ],
+      offset,
+      limit,
+      order: [['created_at', 'DESC']],
+    });
+    res.json({ success: true, data: rows, pagination: { total: count, page, limit, pages: Math.ceil(count / limit) } });
+  } catch (err) { next(err); }
+};
+
+const normalizeCouponPayload = (body) => {
+  const code = String(body.code || '').trim().toUpperCase();
+  const codeType = String(body.code_type || '').toUpperCase() === 'PERCENT' ? 'PERCENTAGE' : String(body.code_type || '').toUpperCase();
+  const amount = Number(body.amount);
+  if (!code || !['FLAT', 'PERCENTAGE'].includes(codeType) || !Number.isFinite(amount) || amount <= 0 || (codeType === 'PERCENTAGE' && amount > 100)) {
+    const error = new Error('Enter a valid coupon code and discount amount');
+    error.status = 400;
+    throw error;
+  }
+  const optionalNumber = (value) => value === '' || value === null || value === undefined ? null : Number(value);
+  const maxDiscount = optionalNumber(body.max_discount);
+  const minAmount = optionalNumber(body.min_amount) ?? 0;
+  const usageLimit = optionalNumber(body.usage_limit);
+  const perUserLimit = optionalNumber(body.per_user_limit) ?? 1;
+  const perDeviceLimit = optionalNumber(body.per_device_limit);
+  const maxSeats = optionalNumber(body.max_seats);
+  const isPositiveIntegerOrNull = (value) => value === null || (Number.isInteger(value) && value > 0);
+  if ((maxDiscount !== null && (!Number.isFinite(maxDiscount) || maxDiscount <= 0))
+    || !Number.isFinite(minAmount) || minAmount < 0
+    || !isPositiveIntegerOrNull(usageLimit)
+    || !isPositiveIntegerOrNull(perUserLimit)
+    || !isPositiveIntegerOrNull(perDeviceLimit)
+    || !isPositiveIntegerOrNull(maxSeats)) {
+    const error = new Error('Coupon limits and amounts must be positive valid numbers');
+    error.status = 400;
+    throw error;
+  }
+  return {
+    ...body,
+    code,
+    code_type: codeType,
+    amount,
+    max_discount: maxDiscount,
+    min_amount: minAmount,
+    usage_limit: usageLimit,
+    per_user_limit: perUserLimit,
+    per_device_limit: perDeviceLimit,
+    max_seats: maxSeats,
+  };
 };

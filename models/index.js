@@ -25,6 +25,7 @@ const Payment = require('./Payment');
 const Refund = require('./Refund');
 const Pass = require('./Pass');
 const Coupon = require('./Coupon');
+const CouponUsage = require('./CouponUsage');
 const Notification = require('./Notification');
 const AuditLog = require('./AuditLog');
 const SystemSetting = require('./SystemSetting');
@@ -117,6 +118,12 @@ Booking.belongsTo(Stop, { foreignKey: 'destination_stop_id', as: 'destination_st
 
 Booking.belongsTo(Coupon, { foreignKey: 'coupon_id', as: 'coupon' });
 Coupon.hasMany(Booking, { foreignKey: 'coupon_id', as: 'bookings' });
+Coupon.hasMany(CouponUsage, { foreignKey: 'coupon_id', as: 'redemptions' });
+CouponUsage.belongsTo(Coupon, { foreignKey: 'coupon_id', as: 'coupon' });
+CouponUsage.belongsTo(Booking, { foreignKey: 'booking_id', as: 'booking' });
+Booking.hasOne(CouponUsage, { foreignKey: 'booking_id', as: 'coupon_usage' });
+CouponUsage.belongsTo(CustomerUser, { foreignKey: 'passenger_id', as: 'passenger' });
+CustomerUser.hasMany(CouponUsage, { foreignKey: 'passenger_id', as: 'coupon_usages' });
 
 // ─── Payment Associations ────────────────────────────────
 Payment.belongsTo(Booking, { foreignKey: 'booking_id', as: 'booking' });
@@ -166,6 +173,7 @@ module.exports = {
   Refund,
   Pass,
   Coupon,
+  CouponUsage,
   Notification,
   AuditLog,
   SystemSetting,

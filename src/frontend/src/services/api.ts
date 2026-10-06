@@ -185,8 +185,10 @@ export const passesAPI = {
 };
 
 export const couponsAPI = {
+  available: (params?: object) => api.get('/bus/coupons', { params }),
   list: (params?: object) => api.get('/coupons', { params }),
   show: (id: number) => api.get(`/coupons/${id}`),
+  usages: (id: number, params?: object) => api.get(`/coupons/${id}/usages`, { params }),
   create: (data: object) => api.post('/coupons', data),
   update: (id: number, data: object) => api.put(`/coupons/${id}`, data),
   delete: (id: number) => api.delete(`/coupons/${id}`),

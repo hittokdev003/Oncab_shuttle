@@ -31,6 +31,7 @@ router.delete('/passes/:id', requirePermission('passes.manage'), passController.
 // Coupons
 router.post('/coupons/validate', requirePermission('coupons.read'), couponController.validate);
 router.get('/coupons', requirePermission('coupons.read'), couponController.list);
+router.get('/coupons/:id/usages', requirePermission('coupons.read'), couponController.usages);
 router.get('/coupons/:id', requirePermission('coupons.read'), couponController.show);
 router.post('/coupons', requirePermission('coupons.manage'), couponController.create);
 router.put('/coupons/:id', requirePermission('coupons.manage'), couponController.update);

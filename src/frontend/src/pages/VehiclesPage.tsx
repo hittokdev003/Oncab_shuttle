@@ -9,6 +9,7 @@ interface Vehicle {
   owner_id?: number | null;
   driver_id?: number | null;
   registration_number: string;
+  bus_type_id?: number | null;
   company_model: string;
   engine_type: string;
   color: string;
@@ -35,6 +36,7 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
   const [ownersLoading, setOwnersLoading] = useState(false);
   const [ownersLoadError, setOwnersLoadError] = useState('');
   const [drivers, setDrivers] = useState<any[]>([]);
+  const [busTypes, setBusTypes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -53,6 +55,7 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
   const [form, setForm] = useState({
     owner_id: '',
     driver_id: '',
+    bus_type_id: '',
     registration_number: '',
     company_model: '',
     engine_type: '',
@@ -138,6 +141,10 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
     driversAPI.list({ page: 1, limit: 200 })
       .then((response) => setDrivers(response.data.data || []))
       .catch(() => setDrivers([]));
+
+    vehiclesAPI.busTypes()
+      .then((response) => setBusTypes(response.data.data || []))
+      .catch(() => setBusTypes([]));
   }, [isOwner]);
 
   const fetchVehicles = useCallback(async () => {
@@ -172,6 +179,7 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
     setForm({
       owner_id: isOwner ? String(user?.id || '') : '',
       driver_id: '',
+      bus_type_id: '',
       registration_number: '',
       company_model: '',
       engine_type: 'electric',
@@ -188,6 +196,7 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
     setForm({
       owner_id: isOwner ? String(user?.id || '') : String(v.owner_id || ''),
       driver_id: v.driver_id ? String(v.driver_id) : '',
+      bus_type_id: v.bus_type_id ? String(v.bus_type_id) : '',
       registration_number: v.registration_number,
       company_model: v.company_model || '',
       engine_type: v.engine_type || '',
@@ -258,6 +267,7 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
         ...form,
         owner_id: isOwner ? Number(user?.id) : Number(form.owner_id),
         driver_id: form.driver_id ? Number(form.driver_id) : null,
+        bus_type_id: form.bus_type_id ? Number(form.bus_type_id) : null,
         total_seats: Number(form.total_seats || 0),
       };
       if (editVehicle) {
@@ -848,6 +858,20 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
               <option value="">Unassigned</option>
               {selectableDrivers.map((driver) => (
                 <option key={driver.id} value={String(driver.id)}>{driver.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-300">Bus Type</label>
+            <select
+              value={form.bus_type_id}
+              onChange={(e) => setForm({ ...form, bus_type_id: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500"
+            >
+              <option value="">Select a bus type</option>
+              {busTypes.map((busType) => (
+                <option key={busType.id} value={String(busType.id)}>{busType.name}</option>
               ))}
             </select>
           </div>

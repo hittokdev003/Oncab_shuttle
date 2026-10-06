@@ -22,6 +22,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
     route_id: '',
     driver_id: '',
     vehicle_id: '',
+    bus_type_id: '',
     trip_date: '',
     departure_time: '',
     seat_capacity: '',
@@ -88,6 +89,11 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
         route_id: parseInt(singleForm.route_id),
         driver_id: singleForm.driver_id ? parseInt(singleForm.driver_id) : null,
         vehicle_id: singleForm.vehicle_id ? parseInt(singleForm.vehicle_id) : null,
+        bus_type_id: singleForm.bus_type_id
+          ? parseInt(singleForm.bus_type_id)
+          : (vehicles.find((vehicle) => String(vehicle.id) === singleForm.vehicle_id)?.bus_type_id
+            || vehicles.find((vehicle) => String(vehicle.id) === singleForm.vehicle_id)?.bus_type?.id
+            || null),
         trip_date: singleForm.trip_date || new Date().toISOString().split('T')[0],
         departure_time: singleForm.departure_time,
         seat_capacity: singleForm.seat_capacity ? parseInt(singleForm.seat_capacity) : 40,
@@ -100,6 +106,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
         route_id: '',
         driver_id: '',
         vehicle_id: '',
+        bus_type_id: '',
         trip_date: '',
         departure_time: '',
         seat_capacity: '',
@@ -280,7 +287,17 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               </label>
               <select
                 value={singleForm.vehicle_id}
-                onChange={(e) => setSingleForm({ ...singleForm, vehicle_id: e.target.value })}
+                onChange={(e) => {
+                  const vehicleId = e.target.value;
+                  const selectedVehicle = vehicles.find((vehicle) => String(vehicle.id) === vehicleId);
+                  setSingleForm((previous) => ({
+                    ...previous,
+                    vehicle_id: vehicleId,
+                    bus_type_id: selectedVehicle?.bus_type_id || selectedVehicle?.bus_type?.id
+                      ? String(selectedVehicle.bus_type_id || selectedVehicle.bus_type.id)
+                      : '',
+                  }));
+                }}
                 className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
               >
                 <option value="">Select a vehicle</option>

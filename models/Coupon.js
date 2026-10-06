@@ -16,6 +16,8 @@ const Coupon = sequelize.define('Coupon', {
   usage_limit: { type: DataTypes.INTEGER, defaultValue: null },
   used_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   per_user_limit: { type: DataTypes.INTEGER, defaultValue: 1 },
+  per_device_limit: { type: DataTypes.INTEGER, defaultValue: null },
+  max_seats: { type: DataTypes.INTEGER, defaultValue: null },
   description: { type: DataTypes.TEXT, defaultValue: null },
   applicable_to: { type: DataTypes.ENUM('All', 'Route', 'Pass'), defaultValue: 'All' },
   route_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { couponsAPI } from '../services/api';
 import { Card, Table, Tr, Td, Pagination, SearchInput, Button, Select, StatusBadge, Modal, Input, ConfirmDialog, ErrorState, Badge } from '../components/ui';
-import { Plus, Edit2, Trash2, Tag } from 'lucide-react';
+import { Plus, Edit2, Trash2, Tag, History } from 'lucide-react';
 
 interface CouponsPageProps { onNotify: (msg: string, type?: any) => void; }
 
@@ -16,9 +16,14 @@ export const CouponsPage: React.FC<CouponsPageProps> = ({ onNotify }) => {
   const [showModal, setShowModal] = useState(false);
   const [editCoupon, setEditCoupon] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [usageCoupon, setUsageCoupon] = useState<any>(null);
+  const [usages, setUsages] = useState<any[]>([]);
+  const [usagesLoading, setUsagesLoading] = useState(false);
+  const [usagePage, setUsagePage] = useState(1);
+  const [usagePagination, setUsagePagination] = useState({ total: 0, pages: 1, limit: 15 });
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ code: '', code_type: 'FLAT', amount: '0', max_discount: '', min_amount: '0', usage_limit: '', start_date: '', end_date: '', description: '', status: 'Active' });
+  const [form, setForm] = useState({ code: '', code_type: 'FLAT', amount: '0', max_discount: '', min_amount: '0', usage_limit: '', per_user_limit: '1', per_device_limit: '', max_seats: '', start_date: '', end_date: '', description: '', status: 'Active' });
 
   const fetch = useCallback(async () => {
     try {
@@ -33,9 +38,26 @@ export const CouponsPage: React.FC<CouponsPageProps> = ({ onNotify }) => {
   useEffect(() => { fetch(); }, [fetch]);
   useEffect(() => { setPage(1); }, [search, statusFilter]);
 
-  const openCreate = () => { setEditCoupon(null); setForm({ code: '', code_type: 'FLAT', amount: '0', max_discount: '', min_amount: '0', usage_limit: '', start_date: '', end_date: '', description: '', status: 'Active' }); setShowModal(true); };
-  const openEdit = (c: any) => { setEditCoupon(c); setForm({ code: c.code, code_type: c.code_type, amount: String(c.amount), max_discount: String(c.max_discount || ''), min_amount: String(c.min_amount || '0'), usage_limit: String(c.usage_limit || ''), start_date: c.start_date || '', end_date: c.end_date || '', description: c.description || '', status: c.status }); setShowModal(true); };
+  const openCreate = () => { setEditCoupon(null); setForm({ code: '', code_type: 'FLAT', amount: '0', max_discount: '', min_amount: '0', usage_limit: '', per_user_limit: '1', per_device_limit: '', max_seats: '', start_date: '', end_date: '', description: '', status: 'Active' }); setShowModal(true); };
+  const openEdit = (c: any) => { setEditCoupon(c); setForm({ code: c.code, code_type: c.code_type, amount: String(c.amount), max_discount: String(c.max_discount || ''), min_amount: String(c.min_amount || '0'), usage_limit: String(c.usage_limit || ''), per_user_limit: String(c.per_user_limit ?? '1'), per_device_limit: String(c.per_device_limit ?? ''), max_seats: String(c.max_seats ?? ''), start_date: c.start_date || '', end_date: c.end_date || '', description: c.description || '', status: c.status }); setShowModal(true); };
   const f = (k: keyof typeof form) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
+
+  const loadUsages = async (coupon: any, nextPage: number) => {
+    setUsagesLoading(true);
+    try {
+      const response = await couponsAPI.usages(coupon.id, { page: nextPage, limit: 15 });
+      setUsages(response.data.data);
+      setUsagePagination(response.data.pagination);
+      setUsagePage(nextPage);
+    } catch (e: any) {
+      onNotify(e.response?.data?.message || 'Could not load coupon usage', 'error');
+    } finally { setUsagesLoading(false); }
+  };
+
+  const openUsages = async (coupon: any) => {
+    setUsageCoupon(coupon);
+    await loadUsages(coupon, 1);
+  };
 
   const handleSave = async () => {
     if (!form.code || !form.amount) { onNotify('Code and amount required', 'error'); return; }
@@ -55,7 +77,7 @@ export const CouponsPage: React.FC<CouponsPageProps> = ({ onNotify }) => {
     finally { setDeleting(false); }
   };
 
-  const HEADERS = ['Code', 'Type', 'Discount', 'Min Order', 'Used', 'Expires', 'Status', 'Actions'];
+  const HEADERS = ['Code', 'Type', 'Discount', 'Min Order', 'Used', 'Usage / Seat Caps', 'Expires', 'Status', 'Actions'];
 
   return (
     <div className="space-y-5">
@@ -79,7 +101,7 @@ export const CouponsPage: React.FC<CouponsPageProps> = ({ onNotify }) => {
                       <div className="text-white font-mono font-bold text-sm">{c.code}</div>
                     </div>
                   </Td>
-                  <Td><Badge color={c.code_type === 'FLAT' ? 'blue' : 'purple'}>{c.code_type}</Badge></Td>
+                  <Td><Badge color={c.code_type === 'FLAT' ? 'blue' : 'purple'}>{c.code_type === 'FLAT' ? 'FLAT' : 'PERCENTAGE'}</Badge></Td>
                   <Td>
                     <div className="text-emerald-400 font-semibold text-sm">
                       {c.code_type === 'FLAT' ? `₹${c.amount}` : `${c.amount}%`}
@@ -91,10 +113,12 @@ export const CouponsPage: React.FC<CouponsPageProps> = ({ onNotify }) => {
                     <span className="text-white">{c.used_count || 0}</span>
                     {c.usage_limit && <span className="text-slate-500">/{c.usage_limit}</span>}
                   </Td>
+                  <Td className="text-xs text-slate-400">User {c.per_user_limit || 'Unlimited'} / Device {c.per_device_limit || 'Unlimited'} / Seats {c.max_seats || 'Unlimited'}</Td>
                   <Td className="text-xs text-slate-400">{c.end_date ? new Date(c.end_date).toLocaleDateString() : 'No expiry'}</Td>
                   <Td><StatusBadge status={c.status} /></Td>
                   <Td>
                     <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openUsages(c)}><History size={13} /></Button>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(c)}><Edit2 size={13} /></Button>
                       <Button variant="danger" size="sm" onClick={() => setDeleteTarget(c)}><Trash2 size={13} /></Button>
                     </div>
@@ -111,14 +135,38 @@ export const CouponsPage: React.FC<CouponsPageProps> = ({ onNotify }) => {
         <div className="grid grid-cols-2 gap-4">
           <Input label="Coupon Code" value={form.code} onChange={f('code')} placeholder="WELCOME20" required className="col-span-2" />
           <div className="space-y-1.5"><label className="block text-xs font-medium text-slate-400">Discount Type</label>
-            <Select value={form.code_type} onChange={f('code_type')} options={[{ value: 'FLAT', label: 'Flat (₹)' }, { value: 'PERCENT', label: 'Percent (%)' }]} /></div>
+            <Select value={form.code_type} onChange={f('code_type')} options={[{ value: 'FLAT', label: 'Flat (₹)' }, { value: 'PERCENTAGE', label: 'Percent (%)' }]} /></div>
           <Input label={form.code_type === 'FLAT' ? 'Amount (₹)' : 'Percentage (%)'} type="number" value={form.amount} onChange={f('amount')} required />
-          {form.code_type === 'PERCENT' && <Input label="Max Discount (₹)" type="number" value={form.max_discount} onChange={f('max_discount')} />}
+          {form.code_type === 'PERCENTAGE' && <Input label="Max Discount (₹)" type="number" value={form.max_discount} onChange={f('max_discount')} />}
           <Input label="Min Order (₹)" type="number" value={form.min_amount} onChange={f('min_amount')} />
           <Input label="Usage Limit" type="number" value={form.usage_limit} onChange={f('usage_limit')} placeholder="Unlimited" />
+          <Input label="Per User Limit" type="number" value={form.per_user_limit} onChange={f('per_user_limit')} />
+          <Input label="Per Device Limit" type="number" value={form.per_device_limit} onChange={f('per_device_limit')} placeholder="Unlimited" />
+          <Input label="Max Seats Per Booking" type="number" value={form.max_seats} onChange={f('max_seats')} placeholder="Unlimited" />
           <Input label="Start Date" type="date" value={form.start_date} onChange={f('start_date')} />
           <Input label="End Date" type="date" value={form.end_date} onChange={f('end_date')} />
+          <div className="space-y-1.5"><label className="block text-xs font-medium text-slate-400">Status</label>
+            <Select value={form.status} onChange={f('status')} options={[{ value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }, { value: 'Expired', label: 'Expired' }]} /></div>
           <Input label="Description" value={form.description} onChange={f('description')} placeholder="Coupon description" className="col-span-2" />
+        </div>
+      </Modal>
+      <Modal open={!!usageCoupon} onClose={() => setUsageCoupon(null)} title={`Usage · ${usageCoupon?.code || ''}`}>
+        <div className="max-h-[60vh] overflow-auto">
+          {usagesLoading ? <div className="py-10 text-center text-sm text-slate-400">Loading usage...</div> : usages.length === 0 ? <div className="py-10 text-center text-sm text-slate-400">No bookings have used this coupon.</div> : (
+            <Table headers={['Passenger', 'User ID', 'Device ID', 'Booking', 'Discount', 'Used At']}>
+              {usages.map((usage) => (
+                <Tr key={usage.id}>
+                  <Td><div className="text-white text-sm">{usage.passenger?.name || 'Passenger'}</div><div className="text-xs text-slate-500">{usage.passenger?.mobile || ''}</div></Td>
+                  <Td className="text-xs text-slate-300">{usage.passenger_id}</Td>
+                  <Td className="max-w-36 truncate text-xs text-slate-400">{usage.device_id || 'Not supplied'}</Td>
+                  <Td className="text-xs text-slate-300">{usage.booking?.booking_reference || `#${usage.booking_id}`}</Td>
+                  <Td className="text-xs text-emerald-400">₹{usage.discount_amount}</Td>
+                  <Td className="text-xs text-slate-400">{new Date(usage.created_at).toLocaleString()}</Td>
+                </Tr>
+              ))}
+            </Table>
+          )}
+          {!usagesLoading && usagePagination.pages > 1 && <Pagination page={usagePage} pages={usagePagination.pages} total={usagePagination.total} limit={usagePagination.limit} onPageChange={(nextPage) => loadUsages(usageCoupon, nextPage)} />}
         </div>
       </Modal>
       <ConfirmDialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} title="Delete Coupon" message={`Delete coupon "${deleteTarget?.code}"?`} loading={deleting} />
