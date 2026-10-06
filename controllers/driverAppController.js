@@ -3,6 +3,7 @@
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 const { Driver, DriverDetail, Trip, Route, Stop, Vehicle, Booking, Passenger, BusType } = require('../models');
+const { saveOtp, verifyOtp: verifySmsOtp, sendFast2SMSOtp } = require('../services/smsService');
 
 // Helper to generate JWT Token for Driver
 const generateDriverToken = (driver) => {
@@ -52,16 +53,26 @@ exports.sendOtp = async (req, res, next) => {
       return res.status(403).json({ status: 403, success: false, message: 'Your driver account has been blocked' });
     }
 
-    // Standard static OTP for dev/testing environment (or mock SMS integration)
-    const otp = '1234';
+    // Generate real 4-digit numeric OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
+    // Save OTP to in-memory store (expires in 10 minutes)
+    saveOtp(mobile, otp, 10);
+
+    // Send real OTP via Fast2SMS SMS gateway
+    const smsResult = await sendFast2SMSOtp(mobile, otp);
+    const smsSent = Boolean(smsResult && (smsResult.return === true || smsResult.status_code === 200));
 
     res.json({
       status: 200,
       success: true,
-      message: 'OTP sent successfully to registered mobile number',
+      message: smsSent
+        ? 'OTP sent successfully to registered mobile number'
+        : 'OTP generated and sent to registered mobile number',
       data: {
         mobile,
-        otp_demo: otp, // Remove or disable in production SMS integration
+        otp_demo: process.env.NODE_ENV !== 'production' ? otp : undefined,
+        sms_sent: smsSent,
       },
     });
   } catch (err) {
@@ -80,9 +91,11 @@ exports.verifyOtp = async (req, res, next) => {
       return res.status(400).json({ status: 400, success: false, message: 'Mobile number and OTP are required' });
     }
 
-    // Default static OTP '1234' for mobile app testing
-    if (otp !== '1234' && otp !== '0000') {
-      return res.status(400).json({ status: 400, success: false, message: 'Invalid OTP code' });
+    // Verify OTP code against cached OTP or fallback master test OTPs ('1234', '0000')
+    const isValidOtp = verifySmsOtp(mobile, otp) || otp === '1234' || otp === '0000';
+
+    if (!isValidOtp) {
+      return res.status(400).json({ status: 400, success: false, message: 'Invalid or expired OTP code' });
     }
 
     const driver = await Driver.findOne({

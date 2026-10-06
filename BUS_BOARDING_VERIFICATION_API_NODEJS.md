@@ -248,58 +248,123 @@ COMPLETE TRIP (/api2/bus-driver/trips/:id/complete)
 
 ### POST `/api2/bus/search-routes`
 
-**Description:** Search routes with filters for origin, destination, travel date, and bus type.
+**Description:** Cityflo-style location-first route search. Automatically resolves nearby candidate stops, enforces direction order (`pickup_sequence < dropoff_sequence`), supports intermediate stop boarding, dynamically generates upcoming dates, and returns direct and nearby route alternatives with schedule timings.
 
-**Request Body:**
+**Request Body (Location Object Format):**
 ```json
 {
-    "origin_city": "Mumbai",
-    "destination_city": "Pune",
-    "travel_date": "2026-10-01",
-    "bus_type_id": 1
+  "pickup": {
+    "name": "TCS GITANJALI",
+    "latitude": 22.5816384,
+    "longitude": 88.4848711
+  },
+  "dropoff": {
+    "name": "Narkel Bagan",
+    "latitude": 22.5785751,
+    "longitude": 88.4716695
+  },
+  "date": "2026-10-06",
+  "passengers": 1
+}
+```
+
+**Request Body (Flat Parameter Format Alternative):**
+```json
+{
+  "pickup_name": "Madhyamgram",
+  "pickup_latitude": 22.6947839,
+  "pickup_longitude": 88.4530183,
+  "dropoff_name": "Airport No. 1 Gate",
+  "dropoff_latitude": 22.6415745,
+  "dropoff_longitude": 88.4312932,
+  "travel_date": "2026-10-06",
+  "passengers": 1
 }
 ```
 
 **Success Response (200):**
 ```json
 {
-    "status": 200,
     "success": true,
-    "message": "Routes searched successfully",
-    "data": {
-        "routes": [
-            {
-                "id": 1,
-                "route_name": "Mumbai to Pune Express",
-                "route_code": "MUM-PUN",
-                "origin_city": "Mumbai",
-                "destination_city": "Pune",
-                "total_distance": 150.5,
-                "estimated_duration": 240,
-                "stops": [...]
-            }
-        ],
-        "schedules": [
-            {
-                "id": 1,
-                "schedule_code": "MUM-PUN-001",
-                "bus_number": "MH-12-AB-1234",
-                "departure_time": "06:00:00",
-                "arrival_time": "10:00:00",
-                "operating_days": "monday,tuesday,wednesday,thursday,friday,saturday,sunday",
-                "base_fare": 350.00,
-                "fare_per_km": 3.00,
-                "seat_capacity": 40,
-                "bus_type": {
-                    "id": 1,
-                    "name": "AC Sleeper",
-                    "total_seats": 40
-                },
-                "route": {
-                    "route_name": "Mumbai to Pune Express"
+    "message": "Routes found successfully",
+    "search": {
+        "pickup": "TCS GITANJALI",
+        "dropoff": "Narkel Bagan",
+        "date": "2026-10-06",
+        "passengers": 1
+    },
+    "resolved_pickup": {
+        "stop_id": 145,
+        "name": "TCS GITANJALI",
+        "matched_by": "exact",
+        "distance": 0
+    },
+    "resolved_dropoff": {
+        "stop_id": 180,
+        "name": "Narkel Bagan",
+        "matched_by": "exact",
+        "distance": 0
+    },
+    "routes": [
+        {
+            "route_id": 48,
+            "route_name": "Ecospace → Tollygunge",
+            "route_code": "008-REV-1791295837",
+            "pickup_stop": {
+                "id": 298,
+                "name": "TCS GITANJALI",
+                "stop_order": 2,
+                "latitude": 22.5816384,
+                "longitude": 88.4848711,
+                "distance": 0,
+                "distance_km": 0
+            },
+            "dropoff_stop": {
+                "id": 294,
+                "name": "Narkel Bagan",
+                "stop_order": 5,
+                "latitude": 22.5785751,
+                "longitude": 88.4716695,
+                "distance": 0,
+                "distance_km": 0
+            },
+            "pickup_distance": 0,
+            "dropoff_distance": 0,
+            "distance_km": 0,
+            "duration_minutes": 12,
+            "trips": [
+                {
+                    "trip_id": 48001,
+                    "schedule_id": 48001,
+                    "departure_time": "07:30:00",
+                    "pickup_time": "7:34 AM",
+                    "drop_time": "7:46 AM",
+                    "available_seats": 40,
+                    "bus_type": "AC Executive Shuttle"
                 }
-            }
-        ]
+            ]
+        }
+    ],
+    "direct_routes": [...],
+    "nearby_routes": [],
+    "top_pick": { ... },
+    "pickup_groups": [...],
+    "all_timings": [...],
+    "available_dates": [
+        {
+            "date": "2026-10-06",
+            "day": "Tue",
+            "month": "Oct",
+            "day_number": "6",
+            "is_selected": true,
+            "total_timings": 5
+        }
+    ],
+    "summary": {
+        "total_routes": 1,
+        "total_timings": 5,
+        "direct_routes_count": 1,
+        "nearby_routes_count": 0
     }
 }
 ```
@@ -308,48 +373,50 @@ COMPLETE TRIP (/api2/bus-driver/trips/:id/complete)
 
 ### POST `/api2/bus/schedules`
 
-**Description:** Get schedules for a specific route with optional filters for bus type and travel date.
+**Description:** Fetch schedules for a specific route and stop pair with real-time seat counts and trip timings. Supports optional `date_key: true` to group schedules by trip date.
 
-**Request Body:**
+**Request Body (Route Stop Pair Query):**
 ```json
 {
-    "route_id": 1,
-    "bus_type_id": 1,
-    "travel_date": "2026-10-01"
+    "route_id": 48,
+    "pickup_stop_id": 298,
+    "drop_stop_id": 294,
+    "date": "2026-10-06",
+    "passengers": 1
 }
 ```
 
 **Success Response (200):**
 ```json
 {
-    "status": 200,
-    "success": true,
-    "message": "Schedules retrieved successfully",
-    "data": [
+    "status": true,
+    "message": "Schedules found",
+    "search": {
+        "route_id": 48,
+        "pickup_stop_id": 298,
+        "drop_stop_id": 294,
+        "date": "2026-10-06",
+        "passengers": 1
+    },
+    "total": 5,
+    "schedules": [
         {
-            "id": 1,
-            "schedule_code": "MUM-PUN-001",
-            "bus_number": "MH-12-AB-1234",
-            "departure_time": "06:00:00",
-            "arrival_time": "10:00:00",
-            "operating_days": "monday,tuesday,wednesday,thursday,friday,saturday,sunday",
-            "base_fare": 350.00,
-            "fare_per_km": 3.00,
-            "seat_capacity": 40,
-            "booked_seats": 15,
+            "schedule_id": 48001,
+            "trip_id": 48001,
+            "trip_date": "2026-10-06",
+            "route_id": 48,
+            "bus_type_id": 1,
             "bus_type": {
                 "id": 1,
-                "name": "AC Sleeper",
-                "total_seats": 40,
-                "seat_type": "sleeper"
+                "name": "AC Executive Shuttle"
             },
-            "route": {
-                "id": 1,
-                "route_name": "Mumbai to Pune Express",
-                "origin_city": "Mumbai",
-                "destination_city": "Pune",
-                "stops": [...]
-            }
+            "departure_time": "07:30:00",
+            "pickup_time": "7:34 AM",
+            "drop_time": "7:46 AM",
+            "available_seats": 40,
+            "requested_seats": 1,
+            "booking_allowed": true,
+            "status": "active"
         }
     ]
 }
@@ -788,6 +855,20 @@ Authorization: Bearer {accessToken}
 }
 ```
 
+**Seat Already Booked Conflict Error Response (409 Conflict):**
+```json
+{
+    "status": 409,
+    "success": false,
+    "message": "Seat A1 is already booked",
+    "code": "SEAT_ALREADY_BOOKED",
+    "data": {
+        "trip_id": 25,
+        "seat_number": "A1"
+    }
+}
+```
+
 **What the User App Shows:**
 
 ```
@@ -978,7 +1059,7 @@ GET /api2/bookings?page=1&limit=20&booking_status=confirmed&from_date=2026-10-01
 
 ### POST `/api2/bus-driver/auth/login-otp`
 
-**Description:** Send OTP to driver's registered mobile number for login.
+**Description:** Generate a 4-digit OTP, send it to the driver's registered mobile number via Fast2SMS DLT gateway, and store it in-memory with a 10-minute TTL.
 
 **Request Body:**
 ```json
@@ -995,7 +1076,8 @@ GET /api2/bookings?page=1&limit=20&booking_status=confirmed&from_date=2026-10-01
     "message": "OTP sent successfully to registered mobile number",
     "data": {
         "mobile": "9876543210",
-        "otp_demo": "1234"
+        "otp_demo": "4829",
+        "sms_sent": true
     }
 }
 ```
@@ -2726,20 +2808,27 @@ The following features from Laravel are not yet implemented in Node.js but can b
 
 ### Controllers
 - `controllers/authController.js` - Admin authentication
-- `controllers/bookingController.js` - Booking management
-- `controllers/busController.js` - User-facing bus APIs (types, routes, schedules, seat availability, fare calculation)
-- `controllers/driverAppController.js` - Driver app APIs (including boarding verification)
+- `controllers/bookingController.js` - Booking management with SeatReservationService seat conflict validation
+- `controllers/busController.js` - User-facing bus APIs (types, routes, search-routes, search-stops, schedules, seat availability)
+- `controllers/driverAppController.js` - Driver app APIs (home dashboard, current stop, arrive, passenger manifest, QR scan & PIN confirm boarding)
 - `controllers/busDriverAssignmentController.js` - Driver assignment workflow
 - `controllers/tripController.js` - Trip management
-- `controllers/routeController.js` - Route management
+- `controllers/routeController.js` - Route management (CRUD, duplicate, reverse)
+- `controllers/stopController.js` - Reusable master physical stops management
 - `controllers/passengerController.js` - Passenger management
 
+### Services
+- `services/busRouteSearchService.js` - Cityflo-style location-first search algorithm, stop sequence validation, dynamic available dates, fallback schedule generation
+- `services/busStopSearchService.js` - Stop candidate resolution, alias matching, Haversine distance, walking vs driving formatting
+- `services/seatReservationService.js` - Per-trip seat conflict validation & HTTP 409 SEAT_ALREADY_BOOKED enforcement
+
 ### Models
-- `models/Booking.js` - Booking model with boarding fields
+- `models/Booking.js` - Booking model with boarding fields (`boarding_pass_code`, `boarding_pin`, `boarding_status`, `qr_token`)
 - `models/Trip.js` - Trip model
 - `models/BusDriverAssignment.js` - Driver assignment model
 - `models/Route.js` - Route model
-- `models/Stop.js` - Stop model
+- `models/RouteStop.js` - Junction table connecting routes to master physical stops with stop sequence and pickup/dropoff allowances
+- `models/Stop.js` - Master physical stop model
 - `models/Vehicle.js` - Vehicle model
 - `models/BusType.js` - Bus type model
 - `models/Driver.js` - Driver model
@@ -2748,10 +2837,10 @@ The following features from Laravel are not yet implemented in Node.js but can b
 ### Routes
 - `routes/authRoutes.js` - Admin authentication routes
 - `routes/bookingRoutes.js` - Booking routes
-- `routes/busRoutes.js` - User-facing bus routes (public APIs)
-- `routes/driverAppRoutes.js` - Driver app routes
+- `routes/busRoutes.js` - User-facing bus routes (public APIs: search-routes, search-stops, schedules, seat-availability)
+- `routes/driverAppRoutes.js` - Driver app routes (auth, duty status, trips, stops, QR scan, PIN confirm boarding, location update)
 - `routes/tripRoutes.js` - Trip routes
-- `routes/routeRoutes.js` - Route routes
+- `routes/routeRoutes.js` - Route & physical stop master routes
 
 ### Middleware
 - `middleware/auth.js` - Admin authentication middleware
