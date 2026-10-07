@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, Bell, Search, RefreshCw, Sun, Moon } from 'lucide-react';
+import { Menu, Bell, Search, RefreshCw, Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { View } from './Sidebar';
@@ -33,11 +33,20 @@ const PAGE_TITLES: Record<View, string> = {
 interface TopbarProps {
   currentView: View;
   onMenuClick: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
   unreadNotifications?: number;
   onNavigate: (view: View) => void;
 }
 
-export const Topbar: React.FC<TopbarProps> = ({ currentView, onMenuClick, unreadNotifications = 0, onNavigate }) => {
+export const Topbar: React.FC<TopbarProps> = ({ 
+  currentView, 
+  onMenuClick, 
+  isCollapsed = false,
+  onToggleCollapse,
+  unreadNotifications = 0, 
+  onNavigate 
+}) => {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
@@ -47,21 +56,38 @@ export const Topbar: React.FC<TopbarProps> = ({ currentView, onMenuClick, unread
     setTimeout(() => { setRefreshing(false); window.location.reload(); }, 500);
   };
 
+  const isLight = theme === 'light';
+
   return (
     <header
-      className="fixed top-0 right-0 z-30 flex items-center gap-3 px-4 h-14"
+      className="fixed top-0 right-0 z-30 flex items-center gap-3 px-4 h-14 transition-[left] duration-300 border-b"
       style={{
-        left: '260px',
+        left: isCollapsed ? '70px' : '260px',
         backdropFilter: 'blur(20px)',
+        background: isLight ? 'rgba(255, 255, 255, 0.85)' : 'rgba(10, 15, 30, 0.85)',
+        borderColor: isLight ? '#e2e8f0' : 'rgba(255,255,255,0.08)',
+        color: isLight ? '#0f172a' : '#ffffff',
       }}
     >
       {/* Mobile hamburger */}
       <button
         onClick={onMenuClick}
-        className="lg:hidden text-slate-400 hover:text-white transition-colors"
+        className="lg:hidden text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+        title="Open Mobile Navigation"
       >
         <Menu size={20} />
       </button>
+
+      {/* Desktop toggle button */}
+      {onToggleCollapse && (
+        <button
+          onClick={onToggleCollapse}
+          className="hidden lg:flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title={isCollapsed ? 'Expand Sidebar (260px)' : 'Collapse Sidebar (70px)'}
+        >
+          {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+        </button>
+      )}
 
       {/* Page title */}
       <div className="flex-1">
@@ -74,7 +100,7 @@ export const Topbar: React.FC<TopbarProps> = ({ currentView, onMenuClick, unread
         {/* Light / Dark Mode Toggle */}
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-lg transition-all flex items-center gap-1.5 text-xs font-medium border border-slate-700/40 hover:bg-slate-800/60"
+          className="p-2 rounded-lg transition-all flex items-center gap-1.5 text-xs font-medium border border-slate-300 dark:border-slate-700/40 hover:bg-slate-100 dark:hover:bg-slate-800/60"
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
         >
           {theme === 'dark' ? (
@@ -92,7 +118,7 @@ export const Topbar: React.FC<TopbarProps> = ({ currentView, onMenuClick, unread
 
         <button
           onClick={handleRefresh}
-          className="text-slate-400 hover:text-white p-2 rounded-lg transition-all hover:bg-slate-800"
+          className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-2 rounded-lg transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
           title="Refresh"
         >
           <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
@@ -100,7 +126,7 @@ export const Topbar: React.FC<TopbarProps> = ({ currentView, onMenuClick, unread
 
         <button
           onClick={() => onNavigate('notifications')}
-          className="relative text-slate-400 hover:text-white p-2 rounded-lg transition-all hover:bg-slate-800"
+          className="relative text-slate-400 hover:text-slate-700 dark:hover:text-white p-2 rounded-lg transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
         >
           <Bell size={16} />
           {unreadNotifications > 0 && (

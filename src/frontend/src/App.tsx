@@ -446,6 +446,19 @@ const AppInner: React.FC = () => {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const [desktopCollapsed, setDesktopCollapsed] = useState<boolean>(() => {
+    const saved = localStorage.getItem('sidebar_collapsed');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const handleToggleCollapse = () => {
+    setDesktopCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('sidebar_collapsed', String(next));
+      return next;
+    });
+  };
+
   const [toast, setToast] =
     useState<ToastState | null>(null);
 
@@ -823,9 +836,9 @@ const AppInner: React.FC = () => {
       {/* Desktop Sidebar */}
 
       <div
-        className="hidden lg:block"
+        className="hidden lg:block transition-all duration-300 z-40"
         style={{
-          width: '260px',
+          width: desktopCollapsed ? '70px' : '260px',
           flexShrink: 0,
           position: 'fixed',
           left: 0,
@@ -838,6 +851,8 @@ const AppInner: React.FC = () => {
           onSelectView={setCurrentView}
           isOpen={true}
           onClose={() => {}}
+          isCollapsed={desktopCollapsed}
+          onToggleCollapse={handleToggleCollapse}
           unreadNotifications={
             unreadNotifications
           }
@@ -846,12 +861,14 @@ const AppInner: React.FC = () => {
 
       {/* Main Content */}
 
-      <div className="lg:pl-[260px]">
+      <div className={`transition-all duration-300 ${desktopCollapsed ? 'lg:pl-[70px]' : 'lg:pl-[260px]'}`}>
         <Topbar
           currentView={currentView}
           onMenuClick={() =>
             setSidebarOpen(true)
           }
+          isCollapsed={desktopCollapsed}
+          onToggleCollapse={handleToggleCollapse}
           unreadNotifications={
             unreadNotifications
           }

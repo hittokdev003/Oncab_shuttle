@@ -565,14 +565,14 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
       </div>
 
       {/* ── Card 2: Cityflo-Style Future Trip Instance Generator ── */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 dark:from-slate-950 dark:via-indigo-950 dark:to-slate-950 p-5 rounded-2xl border border-indigo-800/40 text-white shadow-lg space-y-4">
+      <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-indigo-200/80 dark:border-indigo-800/40 text-slate-900 dark:text-white shadow-sm space-y-4 transition-colors">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Zap size={18} className="text-amber-400 fill-amber-400" />
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Zap size={18} className="text-amber-500 fill-amber-500" />
               1-Click Future Trip Instance Generator
             </h3>
-            <p className="text-xs text-slate-300 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               Auto-generate daily future trips for all active schedules according to their repeat operating days & validity dates.
             </p>
           </div>
@@ -581,7 +581,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               type="button"
               onClick={() => handleGenerateFutureTrips(7)}
               disabled={generatingFuture}
-              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/20 transition-all disabled:opacity-50"
+              className="px-3.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-slate-700 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 transition-all disabled:opacity-50 shadow-xs"
             >
               +7 Days Ahead
             </button>
@@ -589,7 +589,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               type="button"
               onClick={() => handleGenerateFutureTrips(14)}
               disabled={generatingFuture}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50"
             >
               +14 Days Ahead
             </button>
@@ -597,35 +597,35 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               type="button"
               onClick={() => handleGenerateFutureTrips(30)}
               disabled={generatingFuture}
-              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/20 transition-all disabled:opacity-50"
+              className="px-3.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-slate-700 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 transition-all disabled:opacity-50 shadow-xs"
             >
               +30 Days Ahead
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-white/10">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
           <div>
-            <label className="block text-[11px] font-bold text-slate-200 mb-1 tracking-wider uppercase">
+            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 tracking-wider uppercase">
               GENERATION START DATE
             </label>
             <input
               type="date"
               value={genForm.start_date}
               onChange={(e) => setGenForm({ ...genForm, start_date: e.target.value })}
-              className="w-full px-3 py-2 text-xs bg-slate-800 text-white border border-slate-600 rounded-lg focus:outline-none focus:border-amber-400 font-medium [color-scheme:dark]"
+              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-amber-500 font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-200 mb-1 tracking-wider uppercase">
+            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 tracking-wider uppercase">
               GENERATION END DATE (OPTIONAL)
             </label>
             <input
               type="date"
               value={genForm.end_date}
               onChange={(e) => setGenForm({ ...genForm, end_date: e.target.value })}
-              className="w-full px-3 py-2 text-xs bg-slate-800 text-white border border-slate-600 rounded-lg focus:outline-none focus:border-amber-400 font-medium [color-scheme:dark]"
+              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-amber-500 font-medium"
             />
           </div>
 

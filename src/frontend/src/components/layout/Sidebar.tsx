@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Shield, UserRound, Truck, Route, MapPin,
   CalendarDays, Ticket, UserCheck, Bus, Package, FileX, RefreshCcw,
   CreditCard, Bell, BarChart3, ClipboardList, Settings, ChevronDown,
-  BusFront, X, LogOut, ChevronRight, Tag, Loader2
+  BusFront, X, LogOut, ChevronRight, ChevronLeft, Tag, Loader2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -108,10 +108,20 @@ interface SidebarProps {
   onSelectView: (view: View) => void;
   isOpen: boolean;
   onClose: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
   unreadNotifications?: number;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, isOpen, onClose, unreadNotifications = 0 }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ 
+  currentView, 
+  onSelectView, 
+  isOpen, 
+  onClose, 
+  isCollapsed = false,
+  onToggleCollapse,
+  unreadNotifications = 0 
+}) => {
   const { user, logout, hasPermission } = useAuth();
   const { theme } = useTheme();
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -152,62 +162,109 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, isO
     ),
   })).filter((group) => group.items.length > 0);
 
+  const sidebarWidth = isCollapsed ? '70px' : '260px';
+
   return (
     <>
       <aside
-        className={`fixed top-0 left-0 h-full z-40 flex flex-col transition-transform duration-300`}
+        className={`fixed top-0 left-0 h-full z-40 flex flex-col transition-all duration-300`}
         style={{
-          width: '260px',
+          width: sidebarWidth,
           background: isLight ? '#ffffff' : 'linear-gradient(180deg, #0f172a 0%, #0d1526 100%)',
           borderRight: isLight ? '1px solid #e2e8f0' : '1px solid rgba(99, 102, 241, 0.15)',
           transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
         }}
       >
-        {/* Brand */}
-        <div className="flex items-center gap-3 p-4 border-b" style={{ borderColor: isLight ? '#e2e8f0' : 'rgba(99, 102, 241, 0.15)' }}>
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
-            <BusFront size={20} className="text-white" />
+        {/* Brand Header */}
+        <div 
+          className={`flex items-center ${isCollapsed ? 'justify-center px-2 py-4' : 'justify-between p-4'} border-b`} 
+          style={{ borderColor: isLight ? '#e2e8f0' : 'rgba(99, 102, 241, 0.15)' }}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div 
+              className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer shadow-sm" 
+              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+              onClick={onToggleCollapse}
+              title={isCollapsed ? 'Click to expand sidebar' : 'OncabShuttle'}
+            >
+              <BusFront size={20} className="text-white" />
+            </div>
+            {!isCollapsed && (
+              <div className="flex-1 min-w-0">
+                <div className={`font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>OncabShuttle</div>
+                <div className={`${isLight ? 'text-slate-500' : 'text-slate-400'} text-xs`}>Management System</div>
+              </div>
+            )}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className={`font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>OncabShuttle</div>
-            <div className={`${isLight ? 'text-slate-500' : 'text-slate-400'} text-xs`}>Management System</div>
-          </div>
+
+          {!isCollapsed && onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="hidden lg:flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              title="Collapse Sidebar"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          )}
+
+          {isCollapsed && onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="hidden lg:flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              title="Expand Sidebar"
+            >
+              <ChevronRight size={18} />
+            </button>
+          )}
+
           <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white transition-colors">
             <X size={18} />
           </button>
         </div>
 
         {/* User Card */}
-        <div className="p-3 border-b" style={{ borderColor: isLight ? '#e2e8f0' : 'rgba(99, 102, 241, 0.1)' }}>
-          <div className="flex items-center gap-3 p-2.5 rounded-xl" style={{ background: isLight ? '#f1f5f9' : 'rgba(99, 102, 241, 0.08)' }}>
+        <div className="p-2.5 border-b" style={{ borderColor: isLight ? '#e2e8f0' : 'rgba(99, 102, 241, 0.1)' }}>
+          <div 
+            className={`flex items-center ${isCollapsed ? 'justify-center p-1.5' : 'gap-3 p-2.5'} rounded-xl`} 
+            style={{ background: isLight ? '#f1f5f9' : 'rgba(99, 102, 241, 0.08)' }}
+            title={isCollapsed ? user?.name : undefined}
+          >
             <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm text-white flex-shrink-0" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
               {user?.name?.charAt(0)?.toUpperCase() || 'U'}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className={`text-sm font-medium truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>{user?.name}</div>
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="text-xs px-1.5 py-0.5 rounded-full font-medium capitalize" style={{ background: `${roleBadgeColor}20`, color: roleBadgeColor }}>
-                  {user?.role?.display_name || user?.role?.name || 'User'}
-                </span>
+            {!isCollapsed && (
+              <div className="flex-1 min-w-0">
+                <div className={`text-sm font-medium truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>{user?.name}</div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium capitalize" style={{ background: `${roleBadgeColor}20`, color: roleBadgeColor }}>
+                    {user?.role?.display_name || user?.role?.name || 'User'}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-2 px-2" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(99,102,241,0.2) transparent' }}>
+        <nav className={`flex-1 overflow-y-auto py-2 ${isCollapsed ? 'px-1.5' : 'px-2'}`} style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(99,102,241,0.2) transparent' }}>
           {visibleGroups.map((group) => (
             <div key={group.title} className="mb-1">
-              <button
-                onClick={() => toggleGroup(group.title)}
-                className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors hover:text-slate-300"
-                style={{ color: isLight ? '#94a3b8' : 'rgba(148, 163, 184, 0.6)' }}
-              >
-                <span>{group.title}</span>
-                <ChevronDown size={12} className={`transition-transform ${collapsedGroups[group.title] ? '-rotate-90' : ''}`} />
-              </button>
+              {!isCollapsed ? (
+                <button
+                  onClick={() => toggleGroup(group.title)}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors hover:text-slate-300"
+                  style={{ color: isLight ? '#94a3b8' : 'rgba(148, 163, 184, 0.6)' }}
+                >
+                  <span>{group.title}</span>
+                  <ChevronDown size={12} className={`transition-transform ${collapsedGroups[group.title] ? '-rotate-90' : ''}`} />
+                </button>
+              ) : (
+                <div className="my-1.5 border-t border-slate-200/50 dark:border-slate-800/80" />
+              )}
 
-              {!collapsedGroups[group.title] && (
+              {(!collapsedGroups[group.title] || isCollapsed) && (
                 <div className="space-y-0.5">
                   {group.items.map((item) => {
                     const Icon = item.icon;
@@ -216,7 +273,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, isO
                       <button
                         key={item.id}
                         onClick={() => handleNav(item.id)}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all group"
+                        title={isCollapsed ? item.label : undefined}
+                        className={`w-full flex items-center ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'} rounded-lg text-sm transition-all group relative`}
                         style={{
                           background: isActive
                             ? (isLight ? '#ede9fe' : 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15))')
@@ -224,17 +282,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, isO
                           color: isActive
                             ? (isLight ? '#4f46e5' : '#a5b4fc')
                             : (isLight ? '#475569' : '#94a3b8'),
-                          borderLeft: isActive ? '2px solid #6366f1' : '2px solid transparent',
+                          borderLeft: !isCollapsed && isActive ? '2px solid #6366f1' : '2px solid transparent',
                         }}
                       >
-                        <Icon size={16} style={{ color: isActive ? '#6366f1' : (isLight ? '#64748b' : '#64748b') }} />
-                        <span className="flex-1 text-left font-medium">{item.label}</span>
+                        <Icon size={18} style={{ color: isActive ? '#6366f1' : (isLight ? '#64748b' : '#64748b') }} />
+                        {!isCollapsed && <span className="flex-1 text-left font-medium truncate">{item.label}</span>}
                         {item.id === 'notifications' && unreadNotifications > 0 && (
-                          <span className="text-xs px-1.5 py-0.5 rounded-full text-white font-bold" style={{ background: '#ef4444', minWidth: '20px', textAlign: 'center' }}>
+                          <span className={`${isCollapsed ? 'absolute -top-1 -right-1 text-[10px] w-4 h-4' : 'text-xs px-1.5 py-0.5'} rounded-full text-white font-bold flex items-center justify-center`} style={{ background: '#ef4444' }}>
                             {unreadNotifications}
                           </span>
                         )}
-                        {isActive && <ChevronRight size={14} style={{ color: '#6366f1' }} />}
+                        {!isCollapsed && isActive && <ChevronRight size={14} style={{ color: '#6366f1' }} />}
                       </button>
                     );
                   })}
@@ -245,15 +303,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, isO
         </nav>
 
         {/* Logout */}
-        <div className="p-3 border-t" style={{ borderColor: isLight ? '#e2e8f0' : 'rgba(99, 102, 241, 0.15)' }}>
+        <div className="p-2.5 border-t" style={{ borderColor: isLight ? '#e2e8f0' : 'rgba(99, 102, 241, 0.15)' }}>
           <button
             onClick={handleLogout}
             disabled={loggingOut}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
+            title={isCollapsed ? 'Sign Out' : undefined}
+            className={`w-full flex items-center ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm transition-all`}
             style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.08)' }}
           >
-            {loggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
-            <span className="font-medium">Sign Out</span>
+            {loggingOut ? <Loader2 size={18} className="animate-spin" /> : <LogOut size={18} />}
+            {!isCollapsed && <span className="font-medium">Sign Out</span>}
           </button>
         </div>
       </aside>
