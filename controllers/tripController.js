@@ -27,10 +27,113 @@ const TRIP_DETAILS_INCLUDE = [
   ...TRIP_INCLUDE.filter((include) => include.as !== 'route'),
 ];
 
+// ── Helper to parse date string into local Date object ───────
+const parseLocalDate = (dateStr) => {
+  if (!dateStr || typeof dateStr !== 'string') return new Date();
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+  return new Date(dateStr);
+};
+
+// ── Helper to check if a date matches operating_days ─────────
+const isOperatingDay = (dateObj, operatingDays) => {
+  if (!operatingDays) return true;
+  const str = String(operatingDays).toLowerCase().trim();
+  if (str === 'daily' || str === 'all' || str === '7' || str === '1,2,3,4,5,6,7') return true;
+
+  const dayOfWeek = dateObj.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
+  const isoDay = dayOfWeek === 0 ? 7 : dayOfWeek;
+  const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const dayName = dayNames[dayOfWeek];
+
+  if (str === 'weekdays' && isoDay >= 1 && isoDay <= 5) return true;
+  if (str === 'weekends' && (isoDay === 6 || isoDay === 7)) return true;
+
+  const tokens = str.split(/[,;\s]+/).map((s) => s.trim());
+  return tokens.includes(String(isoDay)) || tokens.includes(String(dayOfWeek)) || tokens.includes(dayName);
+};
+
+// ── Helper to ensure trip instances exist for a date range ────
+const ensureTripInstancesForRange = async (startStr, endStr) => {
+  try {
+    const startDateObj = parseLocalDate(startStr);
+    const endDateObj = parseLocalDate(endStr || startStr);
+    if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) return;
+
+    // Limit maximum auto-generation window per request to 60 days
+    const maxEnd = new Date(startDateObj.getTime() + 60 * 24 * 60 * 60 * 1000);
+    const finalEnd = endDateObj > maxEnd ? maxEnd : endDateObj;
+
+    const masterSchedules = await Trip.findAll({
+      where: {
+        status: { [Op.notIn]: ['Cancelled', 'Completed', 'Inactive'] },
+      },
+    });
+
+    if (masterSchedules.length === 0) return;
+
+    const curr = new Date(startDateObj);
+    while (curr <= finalEnd) {
+      const year = curr.getFullYear();
+      const month = String(curr.getMonth() + 1).padStart(2, '0');
+      const day = String(curr.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      for (const master of masterSchedules) {
+        if (master.valid_from && dateStr < master.valid_from) continue;
+        if (master.valid_until && dateStr > master.valid_until) continue;
+
+        if (!isOperatingDay(curr, master.operating_days)) continue;
+
+        const existing = await Trip.findOne({
+          where: {
+            [Op.or]: [
+              { schedule_code: master.schedule_code, trip_date: dateStr },
+              { route_id: master.route_id, departure_time: master.departure_time, trip_date: dateStr },
+            ],
+          },
+        });
+
+        if (!existing) {
+          await Trip.create({
+            schedule_code: master.schedule_code,
+            route_id: master.route_id,
+            bus_type_id: master.bus_type_id,
+            departure_time: master.departure_time,
+            arrival_time: master.arrival_time,
+            operating_days: master.operating_days,
+            trip_date: dateStr,
+            valid_from: master.valid_from,
+            valid_until: master.valid_until,
+            driver_id: master.driver_id,
+            vehicle_id: master.vehicle_id,
+            status: 'Scheduled',
+            notes: master.notes ? `Generated from master schedule: ${master.notes}` : `Generated trip for ${dateStr}`,
+          });
+        }
+      }
+
+      curr.setDate(curr.getDate() + 1);
+    }
+  } catch (err) {
+    console.error('ensureTripInstancesForRange error:', err);
+  }
+};
+
 // ── List Trips ─────────────────────────────────────────────
 exports.list = async (req, res, next) => {
   try {
     const { page, limit, search, status, route_id, trip_date, from_date, to_date } = req.query;
+
+    const targetFrom = from_date || trip_date || new Date().toISOString().split('T')[0];
+    const targetTo = to_date || trip_date || targetFrom;
+
+    if (targetFrom && targetTo) {
+      await ensureTripInstancesForRange(targetFrom, targetTo);
+    }
+
     const { offset, limit: lim, page: p } = buildPagination(page, limit);
     const where = {};
     if (search) where.schedule_code = { [Op.like]: `%${search}%` };
@@ -38,6 +141,8 @@ exports.list = async (req, res, next) => {
     if (route_id) where.route_id = route_id;
     if (trip_date) where.trip_date = trip_date;
     if (from_date && to_date) where.trip_date = { [Op.between]: [from_date, to_date] };
+    if (from_date && !to_date) where.trip_date = { [Op.gte]: from_date };
+    if (to_date && !from_date) where.trip_date = { [Op.lte]: to_date };
 
     const { count, rows } = await Trip.findAndCountAll({
       where,
@@ -78,6 +183,10 @@ exports.create = async (req, res, next) => {
     }
 
     const trip = await Trip.create({ schedule_code, route_id, bus_type_id, departure_time, arrival_time, operating_days, trip_date, valid_from, valid_until, driver_id, vehicle_id, notes });
+
+    const startDate = valid_from || trip_date || new Date().toISOString().split('T')[0];
+    const endDate = valid_until || new Date(parseLocalDate(startDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    await ensureTripInstancesForRange(startDate, endDate);
 
     await logAction({ userId: req.user?.id, userType: req.user?.role?.name, userName: req.user?.name, action: 'create', module: 'trips', entityType: 'Trip', entityId: trip.id, newValues: { schedule_code, trip_date }, ipAddress: req.ip, description: `Created trip ${schedule_code}` });
 
@@ -172,32 +281,14 @@ exports.assignVehicle = async (req, res, next) => {
   }
 };
 
-// ── Helper to check if a date matches operating_days ─────────
-const isOperatingDay = (dateObj, operatingDays) => {
-  if (!operatingDays) return true;
-  const str = String(operatingDays).toLowerCase().trim();
-  if (str === 'daily' || str === 'all' || str === '7') return true;
-
-  const dayOfWeek = dateObj.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
-  const isoDay = dayOfWeek === 0 ? 7 : dayOfWeek;
-  const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-  const dayName = dayNames[dayOfWeek];
-
-  if (str === 'weekdays' && isoDay >= 1 && isoDay <= 5) return true;
-  if (str === 'weekends' && (isoDay === 6 || isoDay === 7)) return true;
-
-  const tokens = str.split(/[,;\s]+/).map((s) => s.trim());
-  return tokens.includes(String(isoDay)) || tokens.includes(String(dayOfWeek)) || tokens.includes(dayName);
-};
-
 // ── Bulk Generate Future Trips Endpoint ───────────────────────
 exports.generateFutureTrips = async (req, res, next) => {
   try {
     const { start_date, end_date, days_ahead = 14, schedule_ids } = req.body || {};
 
     const today = new Date();
-    const startDateObj = start_date ? new Date(start_date) : today;
-    let endDateObj = end_date ? new Date(end_date) : new Date(startDateObj.getTime() + (parseInt(days_ahead) || 14) * 24 * 60 * 60 * 1000);
+    const startDateObj = start_date ? parseLocalDate(start_date) : today;
+    let endDateObj = end_date ? parseLocalDate(end_date) : new Date(startDateObj.getTime() + (parseInt(days_ahead) || 14) * 24 * 60 * 60 * 1000);
 
     const maxEndDate = new Date(startDateObj.getTime() + 60 * 24 * 60 * 60 * 1000);
     if (endDateObj > maxEndDate) endDateObj = maxEndDate;
@@ -220,7 +311,10 @@ exports.generateFutureTrips = async (req, res, next) => {
 
     const curr = new Date(startDateObj);
     while (curr <= endDateObj) {
-      const dateStr = curr.toISOString().split('T')[0];
+      const year = curr.getFullYear();
+      const month = String(curr.getMonth() + 1).padStart(2, '0');
+      const day = String(curr.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
 
       for (const master of masterSchedules) {
         if (master.valid_from && dateStr < master.valid_from) continue;
@@ -283,3 +377,4 @@ exports.generateFutureTrips = async (req, res, next) => {
     next(err);
   }
 };
+
