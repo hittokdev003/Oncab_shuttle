@@ -742,50 +742,70 @@ exports.checkSeatAvailability = async (req, res, next) => {
       });
     }
 
-    // Determine trip ID for booking lookups
-    let tripId = schedule.id;
-    if (schedule.schedule_code) {
-      const trip = await Trip.findOne({
-        where: {
-          schedule_code: schedule.schedule_code,
-          trip_date: travel_date,
-        },
-      });
-      if (trip) tripId = trip.id;
+    // Determine all related trip/schedule IDs matching schedule_id, schedule_code, or route_id + departure_time
+    const matchConditions = [];
+    if (schedule.id) matchConditions.push({ id: schedule.id });
+    if (schedule_id) matchConditions.push({ id: schedule_id });
+    if (schedule.schedule_code) matchConditions.push({ schedule_code: schedule.schedule_code });
+    if (schedule.route_id && schedule.departure_time) {
+      matchConditions.push({ route_id: schedule.route_id, departure_time: schedule.departure_time });
     }
+
+    const tripIds = new Set([Number(schedule.id), Number(schedule_id)]);
+    if (matchConditions.length > 0) {
+      const relatedTrips = await Trip.findAll({
+        where: { [Op.or]: matchConditions },
+        attributes: ['id'],
+      });
+      const relatedSchedules = await BusSchedule.findAll({
+        where: { [Op.or]: matchConditions },
+        attributes: ['id'],
+      });
+      relatedTrips.forEach((t) => tripIds.add(Number(t.id)));
+      relatedSchedules.forEach((s) => tripIds.add(Number(s.id)));
+    }
+
+    const validTripIds = Array.from(tripIds).filter((id) => id != null && !isNaN(id));
 
     const bookings = await Booking.findAll({
       where: {
-        trip_id: tripId,
+        trip_id: validTripIds,
         travel_date,
-        booking_status: { [Op.ne]: 'cancelled' },
+        booking_status: { [Op.notIn]: ['cancelled', 'Cancelled', 'CANCELLED'] },
+        status: { [Op.notIn]: ['Cancelled', 'cancelled', 'CANCELLED', 'Payment Failed'] },
       },
-      attributes: ['seat_numbers'],
+      attributes: ['seat_numbers', 'total_seats'],
     });
 
     const bookedSeats = new Set();
     bookings.forEach((booking) => {
-      if (booking.seat_numbers && Array.isArray(booking.seat_numbers)) {
-        booking.seat_numbers.forEach((seat) => bookedSeats.add(seat));
+      const parsedSeats = SeatReservationService.parseSeatNumbers(booking.seat_numbers);
+      if (parsedSeats.length > 0) {
+        parsedSeats.forEach((seat) => bookedSeats.add(seat));
       }
     });
 
     const totalSeats = schedule.vehicle?.total_seats || schedule.bus_type?.total_seats || schedule.seat_capacity || 30;
-    const availableSeats = totalSeats - bookedSeats.size;
+    const availableSeats = Math.max(0, totalSeats - bookedSeats.size);
 
     // Generate seat layout
     const seatLayout = [];
-    const rows = schedule.bus_type?.seat_rows || 5;
+    const rows = schedule.bus_type?.seat_rows || 6;
     const columns = schedule.bus_type?.seat_columns || 4;
 
     for (let row = 1; row <= rows; row++) {
       for (let col = 1; col <= columns; col++) {
         const seatNumber = `${row}${String.fromCharCode(64 + col)}`;
+        const altSeatNumber = `${String.fromCharCode(64 + col)}${row}`;
+        const seatIndexStr = String((row - 1) * columns + col);
+
+        const isBooked = bookedSeats.has(seatNumber) || bookedSeats.has(altSeatNumber) || bookedSeats.has(seatIndexStr);
+
         seatLayout.push({
           seat_number: seatNumber,
           row,
           column: col,
-          is_available: !bookedSeats.has(seatNumber),
+          is_available: !isBooked,
         });
       }
     }
