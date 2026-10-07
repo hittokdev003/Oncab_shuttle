@@ -1,6 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 const { Trip, Route, Stop, Driver, Vehicle, BusType, Booking, OwnerApprovalRequest } = require('../models');
 const { logAction } = require('../middleware/auditLog');
 const { hasRole } = require('../utils/roles');
