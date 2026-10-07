@@ -1511,3 +1511,142 @@ exports.createBooking = async (req, res, next) => {
     next(err);
   }
 };
+
+// ── 15. Public Mobile App Cancel Booking ────────────────────
+exports.cancelBooking = async (req, res, next) => {
+  const t = await sequelize.transaction();
+  try {
+    const booking_id = req.body?.booking_id || req.body?.id || req.query?.booking_id || req.query?.id;
+    const booking_reference = req.body?.booking_reference || req.query?.booking_reference;
+    const cancellation_reason = req.body?.cancellation_reason || req.body?.reason || 'Cancelled by passenger';
+    const passenger_mobile = req.body?.passenger_mobile || req.query?.passenger_mobile;
+
+    if (!booking_id && !booking_reference) {
+      await t.rollback();
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'booking_id or booking_reference is required',
+      });
+    }
+
+    const where = {};
+    if (booking_id) where.id = booking_id;
+    if (booking_reference) where.booking_reference = booking_reference;
+
+    const booking = await Booking.findOne({ where, transaction: t });
+    if (!booking) {
+      await t.rollback();
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: 'Booking not found',
+      });
+    }
+
+    // Optional mobile mismatch check if provided
+    if (passenger_mobile && booking.passenger_mobile && String(booking.passenger_mobile).trim() !== String(passenger_mobile).trim()) {
+      await t.rollback();
+      return res.status(403).json({
+        status: 403,
+        success: false,
+        message: 'Passenger mobile mismatch for this booking',
+      });
+    }
+
+    if (booking.booking_status === 'cancelled') {
+      await t.rollback();
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'Booking is already cancelled',
+      });
+    }
+
+    // Update booking status
+    await booking.update({
+      booking_status: 'cancelled',
+      status: 'Cancelled',
+      cancellation_reason,
+      cancelled_at: new Date(),
+    }, { transaction: t });
+
+    // Decrement booked seats on associated trip
+    if (booking.trip_id) {
+      const trip = await Trip.findByPk(booking.trip_id, { transaction: t });
+      if (trip && trip.booked_seats > 0) {
+        await trip.decrement('booked_seats', {
+          by: Math.min(trip.booked_seats, booking.total_seats || 1),
+          transaction: t,
+        });
+      }
+    }
+
+    // Process wallet refund / Refund record if payment was paid
+    let refundRecord = null;
+    let walletCredited = false;
+    let newWalletBalance = null;
+
+    if (booking.payment_status === 'paid' && booking.final_amount > 0) {
+      const passenger = booking.passenger_id
+        ? await CustomerUser.findByPk(booking.passenger_id, { transaction: t })
+        : await CustomerUser.findOne({ where: { mobile: booking.passenger_mobile }, transaction: t });
+
+      const refundRef = `REF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+      if (passenger) {
+        const currentBalance = parseFloat(passenger.wallet_balance || 0);
+        newWalletBalance = Math.round((currentBalance + parseFloat(booking.final_amount)) * 100) / 100;
+        await passenger.update({ wallet_balance: newWalletBalance }, { transaction: t });
+
+        await WalletTransaction.create({
+          passenger_id: passenger.id,
+          type: 'credit',
+          amount: booking.final_amount,
+          balance_after: newWalletBalance,
+          source: 'refund',
+          reference_type: 'booking',
+          reference_id: String(booking.id),
+          description: `Refund for cancelled booking ${booking.booking_reference}`,
+        }, { transaction: t });
+
+        walletCredited = true;
+      }
+
+      refundRecord = await Refund.create({
+        booking_id: booking.id,
+        passenger_id: passenger?.id || booking.passenger_id || null,
+        refund_reference: refundRef,
+        refund_amount: booking.final_amount,
+        refund_reason: cancellation_reason,
+        refund_method: walletCredited ? 'wallet' : 'gateway',
+        status: walletCredited ? 'completed' : 'pending',
+        processed_at: walletCredited ? new Date() : null,
+      }, { transaction: t });
+
+      await booking.update({ payment_status: walletCredited ? 'refunded' : 'refund_pending' }, { transaction: t });
+    }
+
+    await t.commit();
+
+    res.status(200).json({
+      status: 200,
+      success: true,
+      message: walletCredited
+        ? `Booking cancelled and ₹${booking.final_amount} refunded to wallet`
+        : 'Booking cancelled successfully',
+      data: {
+        booking_id: booking.id,
+        booking_reference: booking.booking_reference,
+        booking_status: 'cancelled',
+        refund_amount: booking.final_amount,
+        refund_status: walletCredited ? 'completed' : (booking.final_amount > 0 ? 'pending' : 'none'),
+        refund_method: walletCredited ? 'wallet' : null,
+        ...(newWalletBalance !== null ? { wallet_balance: newWalletBalance } : {}),
+      },
+    });
+  } catch (err) {
+    await t.rollback();
+    next(err);
+  }
+};
