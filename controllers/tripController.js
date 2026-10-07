@@ -351,9 +351,10 @@ exports.create = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     if (!requireOwnerBookingAccess(req, res)) return;
-    const trip = await Trip.findByPk(req.params.id);
-    if (!trip) return res.status(404).json({ success: false, message: 'Trip not found' });
-    if (isOwnerRole(req)) return submitOwnerAssignmentRequest(req, res, trip);
+    const oldTrip = await Trip.findByPk(req.params.id);
+    if (!oldTrip) return res.status(404).json({ success: false, message: 'Trip not found' });
+    if (isOwnerRole(req)) return submitOwnerAssignmentRequest(req, res, oldTrip);
+
     const payload = { ...req.body };
     if (!payload.bus_type_id && payload.vehicle_id) {
       const vehicle = await Vehicle.findByPk(payload.vehicle_id);
@@ -361,8 +362,68 @@ exports.update = async (req, res, next) => {
         payload.bus_type_id = vehicle.bus_type_id;
       }
     }
-    await trip.update(payload);
-    const updated = await Trip.findByPk(trip.id, { include: TRIP_INCLUDE });
+
+    // Default to creating a NEW ROW in database with a NEW ID when editing Master Schedules
+    const createNewRow = payload.create_new_row !== false;
+
+    if (createNewRow) {
+      // 1. Mark original trip schedule as Inactive so it doesn't duplicate future trip generation
+      await oldTrip.update({ status: 'Inactive' });
+
+      // 2. Generate a new unique schedule code
+      let newScheduleCode = `SCH-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const existingCode = await Trip.findOne({ where: { schedule_code: newScheduleCode } });
+      if (existingCode) {
+        newScheduleCode = `SCH-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+
+      // 3. Insert NEW ROW in trips table with brand new auto-increment ID
+      const newTrip = await Trip.create({
+        schedule_code: newScheduleCode,
+        route_id: payload.route_id ? parseInt(payload.route_id) : oldTrip.route_id,
+        driver_id: payload.driver_id !== undefined ? (payload.driver_id ? parseInt(payload.driver_id) : null) : oldTrip.driver_id,
+        vehicle_id: payload.vehicle_id !== undefined ? (payload.vehicle_id ? parseInt(payload.vehicle_id) : null) : oldTrip.vehicle_id,
+        bus_type_id: payload.bus_type_id || oldTrip.bus_type_id,
+        departure_time: payload.departure_time || oldTrip.departure_time,
+        arrival_time: payload.arrival_time || oldTrip.arrival_time,
+        operating_days: Array.isArray(payload.operating_days) ? payload.operating_days.join(',') : (payload.operating_days || oldTrip.operating_days),
+        trip_date: payload.trip_date || payload.valid_from || oldTrip.trip_date || new Date().toISOString().split('T')[0],
+        valid_from: payload.valid_from || oldTrip.valid_from,
+        valid_until: payload.valid_until || oldTrip.valid_until,
+        seat_capacity: payload.seat_capacity ? parseInt(payload.seat_capacity) : oldTrip.seat_capacity,
+        status: payload.status || 'Scheduled',
+        notes: payload.notes || oldTrip.notes,
+      });
+
+      // 4. Generate future trip instances for the new schedule
+      const startDate = newTrip.valid_from || newTrip.trip_date || new Date().toISOString().split('T')[0];
+      const endDate = newTrip.valid_until || new Date(parseLocalDate(startDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      await ensureTripInstancesForRange(startDate, endDate);
+
+      await logAction({
+        userId: req.user?.id,
+        userType: req.user?.role?.name,
+        userName: req.user?.name,
+        action: 'create',
+        module: 'trips',
+        entityType: 'Trip',
+        entityId: newTrip.id,
+        newValues: { schedule_code: newScheduleCode, original_trip_id: oldTrip.id },
+        ipAddress: req.ip,
+        description: `Created new master schedule #${newTrip.id} (${newScheduleCode}) versioned from #${oldTrip.id}`,
+      });
+
+      const updatedNew = await Trip.findByPk(newTrip.id, { include: TRIP_INCLUDE });
+      return res.status(201).json({
+        success: true,
+        message: `New Master Schedule created with ID #${newTrip.id} (${newScheduleCode})`,
+        data: updatedNew,
+      });
+    }
+
+    // Direct in-place update fallback if create_new_row: false is explicitly passed
+    await oldTrip.update(payload);
+    const updated = await Trip.findByPk(oldTrip.id, { include: TRIP_INCLUDE });
     res.json({ success: true, message: 'Trip updated', data: updated });
   } catch (err) {
     next(err);

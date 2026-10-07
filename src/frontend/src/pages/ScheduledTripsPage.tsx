@@ -864,6 +864,16 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
           title={isOwner ? 'Request Assignment Change' : `Edit Master Schedule: ${editSchedule.schedule_code}`}
         >
           <div className="space-y-4">
+            {!isOwner && (
+              <div className="p-3 bg-indigo-950/60 border border-indigo-800/80 rounded-xl text-xs text-indigo-300 space-y-1">
+                <div className="font-semibold text-white flex items-center gap-1.5">
+                  <Zap size={14} className="text-indigo-400" /> Versioning Enabled (New Database Row & ID)
+                </div>
+                <div className="text-[11px] text-indigo-200/90 leading-relaxed">
+                  Saving changes will create a new Master Schedule row in the database with a <strong>brand new ID</strong>, while preserving history for schedule #{editSchedule.id}.
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {!isOwner && <>
               <div>
