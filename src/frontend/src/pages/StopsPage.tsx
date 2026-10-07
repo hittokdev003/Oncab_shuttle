@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Eye, Search, AlertTriangle, CheckCircle, X, Navigation, Loader2, Compass, Map as MapIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Eye, Search, AlertTriangle, CheckCircle, X, Navigation, Loader2, Compass, Map as MapIcon, ChevronRight } from 'lucide-react';
 import { stopsAPI } from '../services/api';
 import { Card, Table, Tr, Td, Pagination, SearchInput, Button, Select, StatusBadge, Modal, ConfirmDialog, ErrorState, Badge } from '../components/ui';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
@@ -72,6 +72,13 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
   const [geocoding, setGeocoding] = useState(false);
   const [mapSearchQuery, setMapSearchQuery] = useState('');
 
+  // Autocomplete Suggestions State
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const searchInputRef = useRef<HTMLDivElement>(null);
+  const userTypingRef = useRef(false);
+
   const [nearbyWarning, setNearbyWarning] = useState<any[]>([]);
 
   const [form, setForm] = useState({
@@ -107,6 +114,67 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter]);
+
+  // Live debounced place search suggestions & auto map positioning as user types
+  useEffect(() => {
+    if (!mapSearchQuery || mapSearchQuery.trim().length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setLoadingSuggestions(true);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapSearchQuery.trim())}&limit=5&addressdetails=1`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setSuggestions(data);
+            setShowSuggestions(true);
+
+            // Automatically focus and show place on map if triggered by active user typing
+            if (userTypingRef.current) {
+              const topItem = data[0];
+              const lat = parseFloat(topItem.lat);
+              const lng = parseFloat(topItem.lon);
+              if (!isNaN(lat) && !isNaN(lng)) {
+                const latFixed = lat.toFixed(7);
+                const lngFixed = lng.toFixed(7);
+                setForm((prev) => ({
+                  ...prev,
+                  latitude: latFixed,
+                  longitude: lngFixed,
+                  address: topItem.display_name,
+                }));
+                setMapCenter([lat, lng]);
+                checkNearby(latFixed, lngFixed);
+              }
+            }
+          } else {
+            setSuggestions([]);
+          }
+        }
+      } catch {
+        // Ignore network errors
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [mapSearchQuery]);
+
+  // Handle click outside suggestions dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const checkNearby = async (latStr: string, lngStr: string) => {
     const lat = parseFloat(latStr);
@@ -148,8 +216,34 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
     }
   };
 
+  // Select place from live search suggestions list
+  const handleSelectSuggestion = (item: any) => {
+    userTypingRef.current = false;
+    const lat = parseFloat(item.lat);
+    const lng = parseFloat(item.lon);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      const latFixed = lat.toFixed(7);
+      const lngFixed = lng.toFixed(7);
+      const placeName = item.display_name.split(',')[0];
+
+      setForm((prev) => ({
+        ...prev,
+        stop_name: prev.stop_name || placeName,
+        latitude: latFixed,
+        longitude: lngFixed,
+        address: item.display_name,
+      }));
+      setMapCenter([lat, lng]);
+      setMapSearchQuery(placeName);
+      setShowSuggestions(false);
+      checkNearby(latFixed, lngFixed);
+      onNotify(`Map centered at: ${placeName}`);
+    }
+  };
+
   // Forward Geocode: Name / Query -> Lat/Lng & Address
   const handleSearchMapLocation = async (queryText?: string) => {
+    userTypingRef.current = false;
     const query = queryText || mapSearchQuery || form.stop_name;
     if (!query || !query.trim()) {
       onNotify('Please enter a location or stop name to search', 'error');
@@ -157,27 +251,14 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
     }
 
     setGeocoding(true);
+    setShowSuggestions(false);
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lng = parseFloat(data[0].lon);
-          if (!isNaN(lat) && !isNaN(lng)) {
-            const latFixed = lat.toFixed(7);
-            const lngFixed = lng.toFixed(7);
-            setForm((prev) => ({
-              ...prev,
-              latitude: latFixed,
-              longitude: lngFixed,
-              address: data[0].display_name || prev.address,
-            }));
-            setMapCenter([lat, lng]);
-            checkNearby(latFixed, lngFixed);
-            onNotify('Location found & map centered');
-            return;
-          }
+          handleSelectSuggestion(data[0]);
+          return;
         }
         onNotify('Location not found on map, please try a different query or click the map', 'error');
       }
@@ -233,6 +314,7 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
   };
 
   const openCreate = () => {
+    userTypingRef.current = false;
     setEditStop(null);
     const defaultLat = '22.4824724';
     const defaultLng = '88.3508133';
@@ -247,11 +329,14 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
     });
     setMapCenter([parseFloat(defaultLat), parseFloat(defaultLng)]);
     setMapSearchQuery('');
+    setSuggestions([]);
+    setShowSuggestions(false);
     setNearbyWarning([]);
     setShowCreateModal(true);
   };
 
   const openEdit = (s: PhysicalStop) => {
+    userTypingRef.current = false;
     setEditStop(s);
     const latStr = s.latitude != null ? String(s.latitude) : '22.4824724';
     const lngStr = s.longitude != null ? String(s.longitude) : '88.3508133';
@@ -269,7 +354,9 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
     if (!isNaN(latNum) && !isNaN(lngNum)) {
       setMapCenter([latNum, lngNum]);
     }
-    setMapSearchQuery('');
+    setMapSearchQuery(s.stop_name || '');
+    setSuggestions([]);
+    setShowSuggestions(false);
     setNearbyWarning([]);
     setShowCreateModal(true);
   };
@@ -479,7 +566,7 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
         </div>
       )}
 
-      {/* ── Big Create / Edit Stop Modal with Interactive Leaflet Map ── */}
+      {/* ── Big Create / Edit Stop Modal with Interactive Leaflet Map & Live Autocomplete ── */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm overflow-y-auto">
           <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
@@ -497,7 +584,7 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Click anywhere on the map to pin exact coordinates & auto-select address details.
+                    Type a place name to auto-locate on map or click anywhere on map to pin exact location.
                   </p>
                 </div>
               </div>
@@ -537,7 +624,12 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
                       required
                       placeholder="e.g. RANIKUTHI- MADHUMITA RESTAURANT"
                       value={form.stop_name}
-                      onChange={(e) => setForm({ ...form, stop_name: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        userTypingRef.current = true;
+                        setForm((prev) => ({ ...prev, stop_name: val }));
+                        setMapSearchQuery(val);
+                      }}
                       className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
                     />
                   </div>
@@ -669,44 +761,94 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
                   </div>
                 </div>
 
-                {/* ── Right Column: Large Interactive Leaflet Map (7 cols) ── */}
+                {/* ── Right Column: Large Interactive Leaflet Map & Live Autocomplete Search (7 cols) ── */}
                 <div className="lg:col-span-7 flex flex-col space-y-3">
-                  {/* Map Search Bar & GPS Controls */}
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search location or landmark (e.g. Ranikuthi, Jadavpur)..."
-                        value={mapSearchQuery}
-                        onChange={(e) => setMapSearchQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSearchMapLocation();
-                          }
-                        }}
-                        className="w-full pl-8 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
-                      />
+                  
+                  {/* Live Place Search Bar with Suggestions Dropdown */}
+                  <div className="relative" ref={searchInputRef}>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Type place or landmark (e.g. Ranikuthi, 14 No, Jadavpur)..."
+                          value={mapSearchQuery}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            userTypingRef.current = true;
+                            setMapSearchQuery(val);
+                            setShowSuggestions(true);
+                          }}
+                          onFocus={() => {
+                            if (suggestions.length > 0) setShowSuggestions(true);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (suggestions.length > 0) {
+                                handleSelectSuggestion(suggestions[0]);
+                              } else {
+                                handleSearchMapLocation();
+                              }
+                            }
+                          }}
+                          className="w-full pl-8 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-medium"
+                        />
+                        {loadingSuggestions && (
+                          <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-indigo-400" />
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSearchMapLocation()}
+                        disabled={geocoding}
+                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                      >
+                        {geocoding ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                        Find
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleUseCurrentLocation}
+                        disabled={geocoding}
+                        className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-lg transition-colors shrink-0"
+                        title="Use My Current GPS Position"
+                      >
+                        <Navigation size={16} />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleSearchMapLocation()}
-                      disabled={geocoding}
-                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shrink-0 disabled:opacity-50"
-                    >
-                      {geocoding ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                      Search
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleUseCurrentLocation}
-                      disabled={geocoding}
-                      className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-lg transition-colors shrink-0"
-                      title="Use My Current GPS Position"
-                    >
-                      <Navigation size={16} />
-                    </button>
+
+                    {/* Autocomplete Floating Suggestions Dropdown */}
+                    {showSuggestions && suggestions.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 z-[2000] mt-1 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-800 text-xs">
+                        <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-950/60">
+                          Matching Map Places (Click to select & center)
+                        </div>
+                        {suggestions.map((item, idx) => {
+                          const title = item.display_name.split(',')[0];
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => handleSelectSuggestion(item)}
+                              className="p-2.5 hover:bg-indigo-950/80 cursor-pointer flex items-start gap-2 text-slate-200 hover:text-white transition-colors"
+                            >
+                              <MapPin size={15} className="text-indigo-400 mt-0.5 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-white truncate flex items-center justify-between">
+                                  <span>{title}</span>
+                                  <ChevronRight size={13} className="text-slate-500" />
+                                </div>
+                                <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                                  {item.display_name}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Leaflet Map Box */}
@@ -741,7 +883,7 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
                     {geocoding && (
                       <div className="absolute top-3 right-3 z-[1000] bg-slate-900/90 border border-indigo-500/50 text-indigo-300 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-lg backdrop-blur-sm">
                         <Loader2 size={14} className="animate-spin text-indigo-400" />
-                        Fetching location details...
+                        Updating map location...
                       </div>
                     )}
                   </div>
@@ -751,7 +893,7 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
                     <div className="flex items-center gap-2 truncate">
                       <MapIcon size={15} className="text-indigo-400 shrink-0" />
                       <span className="truncate">
-                        <strong>Click map or drag pin</strong> to set location. Latitude, Longitude & Address auto-select.
+                        <strong>Type place or click map</strong> to position pin. Latitude, Longitude & Address auto-fill.
                       </span>
                     </div>
                     <span className="font-mono text-[11px] text-indigo-300 bg-indigo-950/80 border border-indigo-800/50 px-2 py-0.5 rounded shrink-0">
