@@ -1454,7 +1454,7 @@ exports.createBooking = async (req, res, next) => {
       boarding_pass_code,
       boarding_pin,
       booking_status: 'confirmed',
-      payment_status: walletPaymentRequested ? 'paid' : 'pending',
+      payment_status: (walletPaymentRequested || final_amount <= 0) ? 'paid' : 'pending',
       qr_token: uuidv4(),
     }, { transaction: t });
 

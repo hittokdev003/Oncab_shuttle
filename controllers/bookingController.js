@@ -133,7 +133,7 @@ exports.create = async (req, res, next) => {
     const boarding_pin = Math.floor(1000 + Math.random() * 9000).toString();
 
     const booking = await Booking.create({
-      booking_reference, trip_id, passenger_id, passenger_name, passenger_mobile, passenger_email, origin_stop_id, destination_stop_id, travel_date, seat_numbers, total_seats: total_seats || 1, total_fare, discount_amount, final_amount, payment_method, coupon_id: appliedCoupon?.id || null, special_requests, boarding_pass_code, boarding_pin, booking_status: 'confirmed', payment_status: 'pending', qr_token: uuidv4(),
+      booking_reference, trip_id, passenger_id, passenger_name, passenger_mobile, passenger_email, origin_stop_id, destination_stop_id, travel_date, seat_numbers, total_seats: total_seats || 1, total_fare, discount_amount, final_amount, payment_method, coupon_id: appliedCoupon?.id || null, special_requests, boarding_pass_code, boarding_pin, booking_status: 'confirmed', payment_status: final_amount <= 0 ? 'paid' : 'pending', qr_token: uuidv4(),
     }, { transaction: t });
 
     if (appliedCoupon) {
