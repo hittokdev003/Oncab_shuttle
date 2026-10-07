@@ -1,9 +1,38 @@
 'use strict';
 
 const { Op, fn, col, literal } = require('sequelize');
-const { Booking, Trip, Driver, Vehicle, Passenger, CustomerUser, Payment, Refund, Route, AuditLog } = require('../models');
+const { Booking, Trip, Driver, Vehicle, Passenger, CustomerUser, Payment, Refund, Route, AuditLog, AdminUser } = require('../models');
 const sequelize = require('../config/database');
 const { hasRole } = require('../utils/roles');
+const SeatReservationService = require('../services/seatReservationService');
+
+const normalizeSeatIdentity = (seat) => {
+  const numericSeat = seat.match(/^\d+$/);
+  if (numericSeat) return `index:${Number(seat)}`;
+
+  const rowFirst = seat.match(/^(\d+)([A-Z])$/);
+  const letterFirst = seat.match(/^([A-Z])(\d+)$/);
+  const row = rowFirst ? Number(rowFirst[1]) : letterFirst ? Number(letterFirst[2]) : null;
+  const column = rowFirst ? rowFirst[2] : letterFirst ? letterFirst[1] : null;
+  if (row && column) return `index:${(row - 1) * 4 + column.charCodeAt(0) - 64}`;
+  return `label:${seat}`;
+};
+
+const getRevenuePeriod = (date, groupBy) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  if (groupBy === 'year') return String(year);
+  if (groupBy === 'month') return `${year}-${month}`;
+  if (groupBy === 'week') {
+    const weekStart = new Date(year, date.getMonth(), date.getDate());
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    return `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+  }
+  return `${year}-${month}-${day}`;
+};
+
+const addMoney = (current, amount) => Math.round((current + amount + Number.EPSILON) * 100) / 100;
 
 // ── Dashboard Stats ────────────────────────────────────────
 exports.stats = async (req, res, next) => {
@@ -161,24 +190,204 @@ exports.stats = async (req, res, next) => {
 // ── Revenue Report ─────────────────────────────────────────
 exports.revenueReport = async (req, res, next) => {
   try {
-    const { from_date, to_date, group_by = 'day' } = req.query;
-    const format = group_by === 'month' ? '%Y-%m' : group_by === 'year' ? '%Y' : '%Y-%m-%d';
-    const where = { status: 'captured' };
-    if (from_date && to_date) where.created_at = { [Op.between]: [new Date(from_date), new Date(to_date + ' 23:59:59')] };
+    const { from_date, to_date } = req.query;
+    const period = ['daily', 'weekly', 'monthly'].includes(req.query.period) ? req.query.period : 'monthly';
+    const groupBy = ['day', 'week', 'month', 'year'].includes(req.query.group_by)
+      ? req.query.group_by
+      : period === 'weekly' ? 'week' : period === 'monthly' ? 'month' : 'day';
+    const isOwner = hasRole(req.user, 'owner');
+    const isAdmin = hasRole(req.user, 'admin');
+    const selectedOwnerId = isAdmin && req.query.owner_id ? Number(req.query.owner_id) : null;
+    if (req.query.owner_id && isAdmin && (!Number.isInteger(selectedOwnerId) || selectedOwnerId < 1)) {
+      return res.status(400).json({ success: false, message: 'owner_id must be a positive integer' });
+    }
 
-    const data = await Payment.findAll({
-      attributes: [
-        [fn('DATE_FORMAT', col('created_at'), format), 'period'],
-        [fn('SUM', col('amount')), 'revenue'],
-        [fn('COUNT', col('id')), 'transactions'],
-      ],
-      where,
-      group: [literal('period')],
-      order: [[literal('period'), 'ASC']],
+    const endDate = to_date ? new Date(`${to_date}T23:59:59.999`) : new Date();
+    let startDate;
+    if (from_date) {
+      startDate = new Date(`${from_date}T00:00:00`);
+    } else {
+      startDate = new Date(endDate);
+      if (period === 'daily') startDate.setDate(startDate.getDate() - 6);
+      else if (period === 'weekly') startDate.setDate(startDate.getDate() - 27);
+      else {
+        startDate.setMonth(startDate.getMonth() - 5);
+        startDate.setDate(1);
+      }
+    }
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate) {
+      return res.status(400).json({ success: false, message: 'A valid date range is required' });
+    }
+
+    let ownerTripIds = null;
+    if (isOwner) {
+      const [vehicles, drivers] = await Promise.all([
+        Vehicle.findAll({ attributes: ['id'], where: { owner_id: req.user.id }, raw: true }),
+        Driver.findAll({ attributes: ['id'], where: { owner_id: req.user.id }, raw: true }),
+      ]);
+      const vehicleIds = vehicles.map((vehicle) => vehicle.id);
+      const driverIds = drivers.map((driver) => driver.id);
+      const ownerTripWhere = vehicleIds.length || driverIds.length
+        ? { [Op.or]: [
+          ...(vehicleIds.length ? [{ vehicle_id: { [Op.in]: vehicleIds } }] : []),
+          ...(driverIds.length ? [{ driver_id: { [Op.in]: driverIds } }] : []),
+        ] }
+        : { id: { [Op.in]: [] } };
+      ownerTripIds = (await Trip.findAll({ attributes: ['id'], where: ownerTripWhere, raw: true })).map((trip) => trip.id);
+    }
+
+    const bookingWhere = {
+      booking_status: { [Op.in]: ['confirmed', 'completed'] },
+      created_at: { [Op.between]: [startDate, endDate] },
+    };
+    if (ownerTripIds) bookingWhere.trip_id = { [Op.in]: ownerTripIds };
+    const bookings = await Booking.findAll({
+      attributes: ['id', 'trip_id', 'travel_date', 'seat_numbers', 'total_seats', 'total_fare', 'discount_amount', 'final_amount', 'created_at'],
+      where: bookingWhere,
+      order: [['created_at', 'ASC'], ['id', 'ASC']],
     });
 
-    const total = data.reduce((acc, r) => acc + parseFloat(r.get('revenue') || 0), 0);
-    res.json({ success: true, data: { report: data, total } });
+    const tripIds = [...new Set(bookings.map((booking) => Number(booking.trip_id)))];
+    const trips = tripIds.length ? await Trip.findAll({
+      attributes: ['id', 'route_id'],
+      where: { id: { [Op.in]: tripIds } },
+      include: [
+        { model: Route, as: 'route', attributes: ['id', 'route_name'], required: false },
+        { model: Vehicle, as: 'vehicle', attributes: ['id', 'owner_id'], required: false },
+        { model: Driver, as: 'driver', attributes: ['id', 'owner_id'], required: false },
+      ],
+    }) : [];
+    const tripById = new Map(trips.map((trip) => [Number(trip.id), trip]));
+    const tripSeatGroups = new Map();
+    for (const booking of bookings) {
+      const trip = tripById.get(Number(booking.trip_id));
+      if (!trip) continue;
+      const vehicleOwnerId = trip.vehicle?.owner_id;
+      const driverOwnerId = trip.driver?.owner_id;
+      const ownerId = vehicleOwnerId || driverOwnerId || null;
+      if (!ownerId || (isOwner && Number(ownerId) !== Number(req.user.id))) continue;
+
+      const tripDateKey = `${Number(trip.id)}:${booking.travel_date}`;
+      let group = tripSeatGroups.get(tripDateKey);
+      if (!group) {
+        group = { trip, ownerId: Number(ownerId), seats: new Map() };
+        tripSeatGroups.set(tripDateKey, group);
+      }
+      const bookingDate = new Date(booking.created_at);
+      const seatNumbers = SeatReservationService.parseSeatNumbers(booking.seat_numbers);
+      const bookingSeatCount = seatNumbers.length || Math.max(1, Number(booking.total_seats) || 1);
+      const storedFare = Number(booking.total_fare);
+      const historicFare = Number.isFinite(storedFare) && storedFare > 0
+        ? storedFare
+        : Math.max(0, Number(booking.final_amount || 0) + Number(booking.discount_amount || 0));
+      const farePerSeat = historicFare / bookingSeatCount;
+      if (seatNumbers.length) {
+        for (const seat of seatNumbers) {
+          const identity = normalizeSeatIdentity(seat);
+          if (!group.seats.has(identity)) group.seats.set(identity, { bookedAt: bookingDate, fare: farePerSeat });
+        }
+      } else {
+        const fallbackSeatCount = Math.max(1, Number(booking.total_seats) || 1);
+        for (let index = 0; index < fallbackSeatCount; index += 1) {
+          group.seats.set(`booking:${booking.id}:${index}`, { bookedAt: bookingDate, fare: farePerSeat });
+        }
+      }
+    }
+
+    const periodTotals = new Map();
+    const periodOwnerTotals = new Map();
+    const ownerTotals = new Map();
+    const routeTotals = new Map();
+    for (const group of tripSeatGroups.values()) {
+      const routeId = Number(group.trip.route_id);
+      let ownerTotal = ownerTotals.get(group.ownerId);
+      if (!ownerTotal) {
+        ownerTotal = { owner_id: group.ownerId, owner_name: group.trip.vehicle?.owner?.name || group.trip.driver?.owner?.name || null, revenue: 0, distinct_seats: 0, trips: 0 };
+        ownerTotals.set(group.ownerId, ownerTotal);
+      }
+      ownerTotal.trips += 1;
+      ownerTotal.distinct_seats += group.seats.size;
+
+      const routeKey = `${group.ownerId}:${routeId}`;
+      let routeTotal = routeTotals.get(routeKey);
+      if (!routeTotal) {
+        routeTotal = {
+          owner_id: group.ownerId,
+          route_id: routeId,
+          route_name: group.trip.route?.route_name || `Route #${routeId}`,
+          fare_per_seat: 0,
+          fare_total: 0,
+          revenue: 0,
+          distinct_seats: 0,
+          trips: 0,
+        };
+        routeTotals.set(routeKey, routeTotal);
+      }
+      routeTotal.distinct_seats += group.seats.size;
+      routeTotal.trips += 1;
+
+      for (const seat of group.seats.values()) {
+        ownerTotal.revenue = addMoney(ownerTotal.revenue, seat.fare);
+        routeTotal.revenue = addMoney(routeTotal.revenue, seat.fare);
+        routeTotal.fare_total = addMoney(routeTotal.fare_total, seat.fare);
+
+        const periodKey = getRevenuePeriod(seat.bookedAt, groupBy);
+        let periodTotal = periodTotals.get(periodKey);
+        if (!periodTotal) {
+          periodTotal = { period: periodKey, revenue: 0, distinct_seats: 0 };
+          periodTotals.set(periodKey, periodTotal);
+        }
+        periodTotal.revenue = addMoney(periodTotal.revenue, seat.fare);
+        periodTotal.distinct_seats += 1;
+
+        const ownerPeriodKey = `${group.ownerId}:${periodKey}`;
+        let ownerPeriodTotal = periodOwnerTotals.get(ownerPeriodKey);
+        if (!ownerPeriodTotal) {
+          ownerPeriodTotal = { owner_id: group.ownerId, period: periodKey, revenue: 0, distinct_seats: 0 };
+          periodOwnerTotals.set(ownerPeriodKey, ownerPeriodTotal);
+        }
+        ownerPeriodTotal.revenue = addMoney(ownerPeriodTotal.revenue, seat.fare);
+        ownerPeriodTotal.distinct_seats += 1;
+      }
+    }
+
+    for (const routeTotal of routeTotals.values()) {
+      routeTotal.fare_per_seat = routeTotal.distinct_seats
+        ? Math.round((routeTotal.fare_total / routeTotal.distinct_seats + Number.EPSILON) * 100) / 100
+        : 0;
+      delete routeTotal.fare_total;
+    }
+
+    const ownerIds = [...ownerTotals.keys()];
+    const owners = ownerIds.length ? await AdminUser.findAll({ attributes: ['id', 'name'], where: { id: { [Op.in]: ownerIds } }, raw: true }) : [];
+    const ownerNames = new Map(owners.map((owner) => [Number(owner.id), owner.name]));
+    const ownerBreakdown = [...ownerTotals.values()]
+      .map((owner) => ({ ...owner, owner_name: ownerNames.get(owner.owner_id) || `Owner #${owner.owner_id}` }))
+      .sort((a, b) => b.revenue - a.revenue);
+    const filteredOwners = selectedOwnerId
+      ? ownerBreakdown.filter((owner) => owner.owner_id === selectedOwnerId)
+      : ownerBreakdown;
+    const routeBreakdown = [...routeTotals.values()]
+      .filter((route) => !selectedOwnerId || route.owner_id === selectedOwnerId)
+      .sort((a, b) => b.revenue - a.revenue);
+    const report = [...periodTotals.values()].sort((a, b) => a.period.localeCompare(b.period));
+    const total = filteredOwners.reduce((sum, owner) => sum + owner.revenue, 0);
+    const distinctSeats = filteredOwners.reduce((sum, owner) => sum + owner.distinct_seats, 0);
+    const filteredReport = selectedOwnerId
+      ? [...periodOwnerTotals.values()]
+        .filter((row) => row.owner_id === selectedOwnerId)
+        .map(({ period, revenue, distinct_seats }) => ({ period, revenue, distinct_seats }))
+        .sort((a, b) => a.period.localeCompare(b.period))
+      : report;
+
+    res.json({ success: true, data: {
+      report: filteredReport,
+      total,
+      distinct_seats: distinctSeats,
+      owner_breakdown: filteredOwners,
+      owner_options: ownerBreakdown.map(({ owner_id, owner_name }) => ({ owner_id, owner_name })),
+      route_breakdown: routeBreakdown,
+    } });
   } catch (err) {
     next(err);
   }
