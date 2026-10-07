@@ -163,6 +163,7 @@ export const tripsAPI = {
 export const bookingsAPI = {
   list: (params?: object) => api.get('/bookings', { params }),
   show: (id: number) => api.get(`/bookings/${id}`),
+  track: (id: number) => api.get(`/bookings/${id}/track`),
   create: (data: object) => api.post('/bookings', data),
   cancel: (id: number, reason?: string) => api.patch(`/bookings/${id}/cancel`, { cancellation_reason: reason }),
   updatePayment: (id: number, data: object) => api.patch(`/bookings/${id}/payment`, data),

@@ -2,12 +2,22 @@
 
 const { Op, fn, col } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
-const { Booking, Trip, CustomerUser, Stop, Payment, Refund, Coupon, CouponUsage, Route, Vehicle, Driver } = require('../models');
+const { Booking, Trip, CustomerUser, Stop, Payment, Refund, Coupon, CouponUsage, Route, Vehicle, Driver, DriverDetail } = require('../models');
 const { logAction } = require('../middleware/auditLog');
 const sequelize = require('../config/database');
 const { calculateCouponDiscount } = require('../utils/coupon');
 const { resolveFare } = require('../utils/fareCalculator');
 const SeatReservationService = require('../services/seatReservationService');
+
+const calculateDistanceMeters = (lat1, lon1, lat2, lon2) => {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+  const R = 6371e3;
+  const rad = (deg) => (deg * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLon = rad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -16,10 +26,36 @@ const buildPagination = (page, limit) => {
 };
 
 const BOOKING_INCLUDE = [
-  { model: Trip, as: 'trip', include: [{ model: Route, as: 'route' }] },
+  {
+    model: Trip,
+    as: 'trip',
+    include: [
+      { model: Route, as: 'route' },
+      {
+        model: Driver,
+        as: 'driver',
+        attributes: ['id', 'name', 'mobile', 'online_status'],
+        required: false,
+        include: [
+          {
+            model: DriverDetail,
+            as: 'details',
+            attributes: ['latitude', 'longitude', 'location_speed_kmh', 'location_heading', 'location_trip_id', 'updated_at'],
+            required: false,
+          },
+        ],
+      },
+      {
+        model: Vehicle,
+        as: 'vehicle',
+        attributes: ['id', 'registration_number', 'company_model', 'status', 'latitude', 'longitude'],
+        required: false,
+      },
+    ],
+  },
   { model: CustomerUser, as: 'passenger', attributes: ['id', 'name', 'mobile', 'email'] },
-  { model: Stop, as: 'origin_stop', attributes: ['id', 'stop_name'] },
-  { model: Stop, as: 'destination_stop', attributes: ['id', 'stop_name'] },
+  { model: Stop, as: 'origin_stop', attributes: ['id', 'stop_name', 'stop_code', 'latitude', 'longitude', 'address', 'landmark'] },
+  { model: Stop, as: 'destination_stop', attributes: ['id', 'stop_name', 'stop_code', 'latitude', 'longitude', 'address', 'landmark'] },
   { model: Coupon, as: 'coupon', attributes: ['id', 'code', 'code_type', 'amount'] },
 ];
 
@@ -218,6 +254,125 @@ exports.updatePayment = async (req, res, next) => {
       await Payment.create({ booking_id: booking.id, passenger_id: booking.passenger_id, amount: booking.final_amount, payment_method, status: 'captured' });
     }
     res.json({ success: true, message: 'Payment updated', data: booking });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── Track Booking Bus & Boarding Stop ──────────────────────────────
+exports.track = async (req, res, next) => {
+  try {
+    const booking = await Booking.findByPk(req.params.id, { include: BOOKING_INCLUDE });
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const bookingData = booking.toJSON();
+    const trip = bookingData.trip || {};
+    const driver = trip.driver || {};
+    const driverDetail = driver.details || {};
+    const vehicle = trip.vehicle || {};
+    const originStop = bookingData.origin_stop || {};
+    const destinationStop = bookingData.destination_stop || {};
+
+    const busLatRaw = driverDetail.latitude != null ? driverDetail.latitude : vehicle.latitude;
+    const busLngRaw = driverDetail.longitude != null ? driverDetail.longitude : vehicle.longitude;
+    const hasBusLocation = busLatRaw != null && busLngRaw != null && !isNaN(Number(busLatRaw)) && !isNaN(Number(busLngRaw));
+
+    const busLocation = hasBusLocation
+      ? {
+          latitude: Number(busLatRaw),
+          longitude: Number(busLngRaw),
+          speed_kmh: driverDetail.location_speed_kmh != null ? Number(driverDetail.location_speed_kmh) : 0,
+          heading: driverDetail.location_heading != null ? Number(driverDetail.location_heading) : 0,
+          updated_at: driverDetail.updated_at || null,
+          driver_name: driver.name || 'Assigned Driver',
+          driver_mobile: driver.mobile || null,
+          vehicle_registration: vehicle.registration_number || null,
+          online_status: driver.online_status || 'offline',
+        }
+      : null;
+
+    const originLatRaw = originStop.latitude;
+    const originLngRaw = originStop.longitude;
+    const hasOriginLocation = originLatRaw != null && originLngRaw != null && !isNaN(Number(originLatRaw)) && !isNaN(Number(originLngRaw));
+
+    const boardingStop = hasOriginLocation
+      ? {
+          id: originStop.id,
+          stop_name: originStop.stop_name,
+          stop_code: originStop.stop_code,
+          latitude: Number(originLatRaw),
+          longitude: Number(originLngRaw),
+          address: originStop.address || null,
+        }
+      : null;
+
+    const destLatRaw = destinationStop.latitude;
+    const destLngRaw = destinationStop.longitude;
+    const hasDestLocation = destLatRaw != null && destLngRaw != null && !isNaN(Number(destLatRaw)) && !isNaN(Number(destLngRaw));
+
+    const destinationLocation = hasDestLocation
+      ? {
+          id: destinationStop.id,
+          stop_name: destinationStop.stop_name,
+          stop_code: destinationStop.stop_code,
+          latitude: Number(destLatRaw),
+          longitude: Number(destLngRaw),
+          address: destinationStop.address || null,
+        }
+      : null;
+
+    let distanceMeters = null;
+    let distanceText = 'N/A';
+    let trackingStatus = 'NO_GPS';
+    let trackingStatusMessage = 'Bus/Driver GPS location unavailable';
+
+    if (busLocation && boardingStop) {
+      distanceMeters = calculateDistanceMeters(
+        busLocation.latitude,
+        busLocation.longitude,
+        boardingStop.latitude,
+        boardingStop.longitude
+      );
+
+      if (distanceMeters !== null) {
+        if (distanceMeters < 1000) {
+          distanceText = `${distanceMeters} m`;
+        } else {
+          distanceText = `${(distanceMeters / 1000).toFixed(2)} km`;
+        }
+
+        if (distanceMeters <= 150) {
+          trackingStatus = 'ARRIVED';
+          trackingStatusMessage = `Bus HAS ARRIVED at Pickup Stop (${boardingStop.stop_name})`;
+        } else if (distanceMeters <= 1000) {
+          trackingStatus = 'ARRIVING_SOON';
+          trackingStatusMessage = `Bus is ARRIVING SOON (${distanceText} away from ${boardingStop.stop_name})`;
+        } else {
+          trackingStatus = 'EN_ROUTE';
+          trackingStatusMessage = `Bus is EN ROUTE (${distanceText} away from ${boardingStop.stop_name})`;
+        }
+      }
+    } else if (!boardingStop) {
+      trackingStatusMessage = 'Pickup stop coordinates not configured';
+    }
+
+    res.json({
+      success: true,
+      data: {
+        booking_id: booking.id,
+        booking_reference: booking.booking_reference,
+        passenger_name: booking.passenger_name,
+        passenger_mobile: booking.passenger_mobile,
+        travel_date: booking.travel_date,
+        bus_location: busLocation,
+        boarding_stop: boardingStop,
+        destination_stop: destinationLocation,
+        distance_meters: distanceMeters,
+        distance_text: distanceText,
+        tracking_status: trackingStatus,
+        tracking_status_message: trackingStatusMessage,
+      },
+    });
   } catch (err) {
     next(err);
   }

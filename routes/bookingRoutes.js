@@ -9,6 +9,7 @@ router.use(authenticate);
 router.get('/cancelled', requirePermission('bookings.read'), bookingController.cancelledList);
 router.get('/', requirePermission('bookings.read'), bookingController.list);
 router.get('/:id', requirePermission('bookings.read'), bookingController.show);
+router.get('/:id/track', requirePermission('bookings.read'), bookingController.track);
 router.post('/', requirePermission('bookings.manage'), bookingController.create);
 router.patch('/:id/cancel', requirePermission('bookings.manage'), bookingController.cancel);
 router.patch('/:id/payment', requirePermission('bookings.manage'), bookingController.updatePayment);
