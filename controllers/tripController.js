@@ -317,115 +317,324 @@ exports.assignmentOptions = async (req, res, next) => {
   }
 };
 
+// ── Core Function: Generate/Update Individual Daily Trip Rows for Date Range ──
+const processTripDateRange = async ({
+  scheduleCode,
+  routeId,
+  busTypeId,
+  driverId,
+  vehicleId,
+  departureTime,
+  arrivalTime,
+  operatingDays,
+  validFrom,
+  validUntil,
+  singleTripDate,
+  status = 'Scheduled',
+  notes = null,
+  seatCapacity = 40,
+  transaction,
+}) => {
+  const normValidFrom = normalizeDateStr(validFrom || singleTripDate || new Date().toISOString().split('T')[0]);
+  const normValidUntil = normalizeDateStr(validUntil || normValidFrom);
+
+  const startObj = parseLocalDate(normValidFrom);
+  const endObj = parseLocalDate(normValidUntil);
+
+  if (isNaN(startObj.getTime()) || isNaN(endObj.getTime())) {
+    throw new Error('Invalid valid_from or valid_until date format');
+  }
+
+  // Find all existing trips belonging to this schedule_code
+  const existingTrips = await Trip.findAll({
+    where: { schedule_code: scheduleCode },
+    transaction,
+  });
+
+  const existingMap = new Map();
+  existingTrips.forEach((t) => {
+    if (t.trip_date) {
+      existingMap.set(normalizeDateStr(t.trip_date), t);
+    }
+  });
+
+  const targetDates = new Set();
+  const resultTrips = [];
+
+  const curr = new Date(startObj);
+  while (curr <= endObj) {
+    const year = curr.getFullYear();
+    const month = String(curr.getMonth() + 1).padStart(2, '0');
+    const day = String(curr.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    if (isOperatingDay(curr, operatingDays)) {
+      targetDates.add(dateStr);
+
+      if (existingMap.has(dateStr)) {
+        // Update existing trip record for this date (preserves unique ID and booked seats)
+        const existingTrip = existingMap.get(dateStr);
+        await existingTrip.update(
+          {
+            route_id: routeId,
+            bus_type_id: busTypeId,
+            driver_id: driverId,
+            vehicle_id: vehicleId,
+            departure_time: departureTime,
+            arrival_time: arrivalTime,
+            operating_days: operatingDays,
+            valid_from: normValidFrom,
+            valid_until: normValidUntil,
+            seat_capacity: seatCapacity,
+            status: status,
+            notes: notes !== undefined ? notes : existingTrip.notes,
+          },
+          { transaction }
+        );
+        resultTrips.push(existingTrip);
+      } else {
+        // Check duplicate by schedule_code + trip_date or route_id + departure_time + trip_date
+        const duplicateCheck = await Trip.findOne({
+          where: {
+            [Op.or]: [
+              { schedule_code: scheduleCode, trip_date: dateStr },
+              { route_id: routeId, departure_time: departureTime, trip_date: dateStr },
+            ],
+          },
+          transaction,
+        });
+
+        if (!duplicateCheck) {
+          const newTrip = await Trip.create(
+            {
+              schedule_code: scheduleCode,
+              route_id: routeId,
+              bus_type_id: busTypeId,
+              driver_id: driverId,
+              vehicle_id: vehicleId,
+              departure_time: departureTime,
+              arrival_time: arrivalTime,
+              operating_days: operatingDays,
+              trip_date: dateStr,
+              valid_from: normValidFrom,
+              valid_until: normValidUntil,
+              seat_capacity: seatCapacity,
+              status: status,
+              notes: notes,
+            },
+            { transaction }
+          );
+          resultTrips.push(newTrip);
+        } else {
+          // If duplicate exists under route/time, update its details
+          await duplicateCheck.update(
+            {
+              schedule_code: scheduleCode,
+              driver_id: driverId,
+              vehicle_id: vehicleId,
+              bus_type_id: busTypeId,
+              operating_days: operatingDays,
+              valid_from: normValidFrom,
+              valid_until: normValidUntil,
+              seat_capacity: seatCapacity,
+              status: status,
+            },
+            { transaction }
+          );
+          resultTrips.push(duplicateCheck);
+        }
+      }
+    }
+
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  // Remove / Cancel trips for dates no longer part of the range / operating days
+  for (const [dateStr, oldTrip] of existingMap.entries()) {
+    if (!targetDates.has(dateStr)) {
+      const bookingCount = await Booking.count({
+        where: { trip_id: oldTrip.id, booking_status: { [Op.ne]: 'cancelled' } },
+        transaction,
+      });
+
+      if (bookingCount === 0) {
+        await oldTrip.destroy({ transaction });
+      } else {
+        await oldTrip.update({ status: 'Cancelled' }, { transaction });
+      }
+    }
+  }
+
+  return resultTrips;
+};
+
 // ── Create Trip ────────────────────────────────────────────
 exports.create = async (req, res, next) => {
+  const t = await sequelize.transaction();
   try {
-    if (isOwnerRole(req)) return res.status(403).json({ success: false, message: 'Owners cannot create trips directly' });
-    let { schedule_code, route_id, bus_type_id, departure_time, arrival_time, operating_days, trip_date, valid_from, valid_until, driver_id, vehicle_id, notes } = req.body;
-    const exists = await Trip.findOne({ where: { schedule_code } });
-    if (exists) return res.status(409).json({ success: false, message: 'Schedule code already exists' });
+    if (isOwnerRole(req)) {
+      await t.rollback();
+      return res.status(403).json({ success: false, message: 'Owners cannot create trips directly' });
+    }
+
+    let {
+      schedule_code,
+      route_id,
+      bus_type_id,
+      departure_time,
+      arrival_time,
+      operating_days,
+      trip_date,
+      valid_from,
+      valid_until,
+      driver_id,
+      vehicle_id,
+      notes,
+      seat_capacity,
+      status = 'Scheduled',
+    } = req.body;
+
+    if (!schedule_code) {
+      schedule_code = `SCH-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    }
 
     if (!bus_type_id && vehicle_id) {
-      const vehicle = await Vehicle.findByPk(vehicle_id);
+      const vehicle = await Vehicle.findByPk(vehicle_id, { transaction: t });
       if (vehicle && vehicle.bus_type_id) {
         bus_type_id = vehicle.bus_type_id;
       }
     }
 
-    const trip = await Trip.create({ schedule_code, route_id, bus_type_id, departure_time, arrival_time, operating_days, trip_date, valid_from, valid_until, driver_id, vehicle_id, notes });
+    const createdTrips = await processTripDateRange({
+      scheduleCode: schedule_code,
+      routeId: parseInt(route_id),
+      busTypeId: bus_type_id ? parseInt(bus_type_id) : null,
+      driverId: driver_id ? parseInt(driver_id) : null,
+      vehicleId: vehicle_id ? parseInt(vehicle_id) : null,
+      departureTime: departure_time,
+      arrivalTime: arrival_time || null,
+      operatingDays: operating_days || '1,2,3,4,5',
+      validFrom: valid_from || trip_date,
+      validUntil: valid_until || valid_from || trip_date,
+      singleTripDate: trip_date,
+      status,
+      notes,
+      seatCapacity: seat_capacity ? parseInt(seat_capacity) : 40,
+      transaction: t,
+    });
 
-    const startDate = valid_from || trip_date || new Date().toISOString().split('T')[0];
-    const endDate = valid_until || new Date(parseLocalDate(startDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    await ensureTripInstancesForRange(startDate, endDate);
+    await logAction({
+      userId: req.user?.id,
+      userType: req.user?.role?.name,
+      userName: req.user?.name,
+      action: 'create',
+      module: 'trips',
+      entityType: 'Trip',
+      entityId: createdTrips[0]?.id || null,
+      newValues: { schedule_code, total_generated: createdTrips.length },
+      ipAddress: req.ip,
+      description: `Created ${createdTrips.length} daily trip record(s) for schedule ${schedule_code}`,
+    });
 
-    await logAction({ userId: req.user?.id, userType: req.user?.role?.name, userName: req.user?.name, action: 'create', module: 'trips', entityType: 'Trip', entityId: trip.id, newValues: { schedule_code, trip_date }, ipAddress: req.ip, description: `Created trip ${schedule_code}` });
+    await t.commit();
 
-    const created = await Trip.findByPk(trip.id, { include: TRIP_INCLUDE });
-    res.status(201).json({ success: true, message: 'Trip created', data: created });
+    const tripIds = createdTrips.map((tr) => tr.id);
+    const fullTrips = await Trip.findAll({
+      where: { id: { [Op.in]: tripIds } },
+      include: scopeTripIncludes(req, TRIP_INCLUDE),
+      order: [['trip_date', 'ASC']],
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `Created ${fullTrips.length} trip record(s) for date range`,
+      data: fullTrips.length === 1 ? fullTrips[0] : fullTrips,
+      count: fullTrips.length,
+    });
   } catch (err) {
+    await t.rollback();
     next(err);
   }
 };
 
 // ── Update Trip ────────────────────────────────────────────
 exports.update = async (req, res, next) => {
+  const t = await sequelize.transaction();
   try {
-    if (!requireOwnerBookingAccess(req, res)) return;
-    const oldTrip = await Trip.findByPk(req.params.id);
-    if (!oldTrip) return res.status(404).json({ success: false, message: 'Trip not found' });
-    if (isOwnerRole(req)) return submitOwnerAssignmentRequest(req, res, oldTrip);
+    if (!requireOwnerBookingAccess(req, res)) {
+      await t.rollback();
+      return;
+    }
+
+    const targetTrip = await Trip.findByPk(req.params.id, { transaction: t });
+    if (!targetTrip) {
+      await t.rollback();
+      return res.status(404).json({ success: false, message: 'Trip not found' });
+    }
+
+    if (isOwnerRole(req)) {
+      await t.rollback();
+      return submitOwnerAssignmentRequest(req, res, targetTrip);
+    }
 
     const payload = { ...req.body };
+    const scheduleCode = payload.schedule_code || targetTrip.schedule_code;
+
     if (!payload.bus_type_id && payload.vehicle_id) {
-      const vehicle = await Vehicle.findByPk(payload.vehicle_id);
+      const vehicle = await Vehicle.findByPk(payload.vehicle_id, { transaction: t });
       if (vehicle && vehicle.bus_type_id) {
         payload.bus_type_id = vehicle.bus_type_id;
       }
     }
 
-    // Default to creating a NEW ROW in database with a NEW ID when editing Master Schedules
-    const createNewRow = payload.create_new_row !== false;
+    const updatedTrips = await processTripDateRange({
+      scheduleCode,
+      routeId: payload.route_id ? parseInt(payload.route_id) : targetTrip.route_id,
+      busTypeId: payload.bus_type_id || targetTrip.bus_type_id,
+      driverId: payload.driver_id !== undefined ? (payload.driver_id ? parseInt(payload.driver_id) : null) : targetTrip.driver_id,
+      vehicleId: payload.vehicle_id !== undefined ? (payload.vehicle_id ? parseInt(payload.vehicle_id) : null) : targetTrip.vehicle_id,
+      departureTime: payload.departure_time || targetTrip.departure_time,
+      arrivalTime: payload.arrival_time !== undefined ? payload.arrival_time : targetTrip.arrival_time,
+      operatingDays: payload.operating_days || targetTrip.operating_days || '1,2,3,4,5',
+      validFrom: payload.valid_from || targetTrip.valid_from || targetTrip.trip_date,
+      validUntil: payload.valid_until || targetTrip.valid_until || payload.valid_from || targetTrip.trip_date,
+      singleTripDate: payload.trip_date || targetTrip.trip_date,
+      status: payload.status || targetTrip.status || 'Scheduled',
+      notes: payload.notes !== undefined ? payload.notes : targetTrip.notes,
+      seatCapacity: payload.seat_capacity ? parseInt(payload.seat_capacity) : targetTrip.seat_capacity,
+      transaction: t,
+    });
 
-    if (createNewRow) {
-      // 1. Mark original trip schedule as Cancelled so it doesn't duplicate future trip generation
-      await oldTrip.update({ status: 'Cancelled' });
+    await logAction({
+      userId: req.user?.id,
+      userType: req.user?.role?.name,
+      userName: req.user?.name,
+      action: 'update',
+      module: 'trips',
+      entityType: 'Trip',
+      entityId: targetTrip.id,
+      newValues: { schedule_code: scheduleCode, total_synced: updatedTrips.length },
+      ipAddress: req.ip,
+      description: `Updated trip schedule ${scheduleCode} (${updatedTrips.length} daily records synced)`,
+    });
 
-      // 2. Generate a new unique schedule code
-      let newScheduleCode = `SCH-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const existingCode = await Trip.findOne({ where: { schedule_code: newScheduleCode } });
-      if (existingCode) {
-        newScheduleCode = `SCH-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-      }
+    await t.commit();
 
-      // 3. Insert NEW ROW in trips table with brand new auto-increment ID
-      const newTrip = await Trip.create({
-        schedule_code: newScheduleCode,
-        route_id: payload.route_id ? parseInt(payload.route_id) : oldTrip.route_id,
-        driver_id: payload.driver_id !== undefined ? (payload.driver_id ? parseInt(payload.driver_id) : null) : oldTrip.driver_id,
-        vehicle_id: payload.vehicle_id !== undefined ? (payload.vehicle_id ? parseInt(payload.vehicle_id) : null) : oldTrip.vehicle_id,
-        bus_type_id: payload.bus_type_id || oldTrip.bus_type_id,
-        departure_time: payload.departure_time || oldTrip.departure_time,
-        arrival_time: payload.arrival_time || oldTrip.arrival_time,
-        operating_days: Array.isArray(payload.operating_days) ? payload.operating_days.join(',') : (payload.operating_days || oldTrip.operating_days),
-        trip_date: payload.trip_date || payload.valid_from || oldTrip.trip_date || new Date().toISOString().split('T')[0],
-        valid_from: payload.valid_from || oldTrip.valid_from,
-        valid_until: payload.valid_until || oldTrip.valid_until,
-        seat_capacity: payload.seat_capacity ? parseInt(payload.seat_capacity) : oldTrip.seat_capacity,
-        status: payload.status || 'Scheduled',
-        notes: payload.notes || oldTrip.notes,
-      });
+    const tripIds = updatedTrips.map((tr) => tr.id);
+    const fullTrips = await Trip.findAll({
+      where: { id: { [Op.in]: tripIds } },
+      include: scopeTripIncludes(req, TRIP_INCLUDE),
+      order: [['trip_date', 'ASC']],
+    });
 
-      // 4. Generate future trip instances for the new schedule
-      const startDate = newTrip.valid_from || newTrip.trip_date || new Date().toISOString().split('T')[0];
-      const endDate = newTrip.valid_until || new Date(parseLocalDate(startDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      await ensureTripInstancesForRange(startDate, endDate);
-
-      await logAction({
-        userId: req.user?.id,
-        userType: req.user?.role?.name,
-        userName: req.user?.name,
-        action: 'create',
-        module: 'trips',
-        entityType: 'Trip',
-        entityId: newTrip.id,
-        newValues: { schedule_code: newScheduleCode, original_trip_id: oldTrip.id },
-        ipAddress: req.ip,
-        description: `Created new master schedule #${newTrip.id} (${newScheduleCode}) versioned from #${oldTrip.id}`,
-      });
-
-      const updatedNew = await Trip.findByPk(newTrip.id, { include: TRIP_INCLUDE });
-      return res.status(201).json({
-        success: true,
-        message: `New Master Schedule created with ID #${newTrip.id} (${newScheduleCode})`,
-        data: updatedNew,
-      });
-    }
-
-    // Direct in-place update fallback if create_new_row: false is explicitly passed
-    await oldTrip.update(payload);
-    const updated = await Trip.findByPk(oldTrip.id, { include: TRIP_INCLUDE });
-    res.json({ success: true, message: 'Trip updated', data: updated });
+    res.json({
+      success: true,
+      message: `Trip schedule updated (${fullTrips.length} daily trip records synced)`,
+      data: fullTrips.length === 1 ? fullTrips[0] : fullTrips,
+      count: fullTrips.length,
+    });
   } catch (err) {
+    await t.rollback();
     next(err);
   }
 };
