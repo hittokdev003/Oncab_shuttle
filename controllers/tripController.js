@@ -367,8 +367,8 @@ exports.update = async (req, res, next) => {
     const createNewRow = payload.create_new_row !== false;
 
     if (createNewRow) {
-      // 1. Mark original trip schedule as Inactive so it doesn't duplicate future trip generation
-      await oldTrip.update({ status: 'Inactive' });
+      // 1. Mark original trip schedule as Cancelled so it doesn't duplicate future trip generation
+      await oldTrip.update({ status: 'Cancelled' });
 
       // 2. Generate a new unique schedule code
       let newScheduleCode = `SCH-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
