@@ -32,6 +32,7 @@ const AuditLog = require('./AuditLog');
 const SystemSetting = require('./SystemSetting');
 const RateChart = require('./RateChart');
 const WalletTransaction = require('./WalletTransaction');
+const OwnerApprovalRequest = require('./OwnerApprovalRequest');
 
 // ─── Role & Permission Associations ─────────────────────
 Role.belongsToMany(Permission, {
@@ -54,6 +55,8 @@ AdminUser.hasMany(Vehicle, { foreignKey: 'owner_id', as: 'owned_vehicles' });
 Vehicle.belongsTo(AdminUser, { foreignKey: 'owner_id', as: 'owner' });
 AdminUser.hasMany(Driver, { foreignKey: 'owner_id', as: 'owned_drivers' });
 Driver.belongsTo(AdminUser, { foreignKey: 'owner_id', as: 'owner' });
+AdminUser.hasMany(OwnerApprovalRequest, { foreignKey: 'owner_id', as: 'owner_approval_requests' });
+OwnerApprovalRequest.belongsTo(AdminUser, { foreignKey: 'owner_id', as: 'owner' });
 
 // ─── Driver Associations ─────────────────────────────────
 Driver.hasOne(DriverDetail, { foreignKey: 'driver_id', as: 'details', onDelete: 'CASCADE' });
@@ -193,4 +196,5 @@ module.exports = {
   SystemSetting,
   RateChart,
   WalletTransaction,
+  OwnerApprovalRequest,
 };

@@ -203,6 +203,7 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { Toast, LoadingState } from './components/ui';
 import { notificationsAPI } from './services/api';
+import { hasRole } from './utils/roles';
 
 // ── Lazy page imports ──────────────────────────────────────
 
@@ -332,6 +333,12 @@ const AuditLogsPage = React.lazy(() =>
   }))
 );
 
+const OwnerApprovalRequestsPage = React.lazy(() =>
+  import('./pages/OwnerApprovalRequestsPage').then(m => ({
+    default: m.OwnerApprovalRequestsPage
+  }))
+);
+
 const SettingsPage = React.lazy(() =>
   import('./pages/SettingsPage').then(m => ({
     default: m.SettingsPage
@@ -399,6 +406,7 @@ const VALID_VIEWS: View[] = [
   'notifications',
   'reports',
   'audit-logs',
+  'owner-requests',
   'settings'
 ];
 
@@ -439,7 +447,7 @@ const getInitialView = (): View => {
 // ── Main App Inner ─────────────────────────────────────────
 
 const AppInner: React.FC = () => {
-  const { isAuthenticated, isLoading, hasPermission } = useAuth();
+  const { isAuthenticated, isLoading, hasPermission, user } = useAuth();
 
   const [currentView, setCurrentViewState] =
     useState<View>(getInitialView);
@@ -598,7 +606,8 @@ const AppInner: React.FC = () => {
   }
 
   const activeViewPermission = VIEW_PERMISSIONS[currentView];
-  const activeView = !activeViewPermission || hasPermission(activeViewPermission) ? currentView : 'dashboard';
+  const approvalRoleAllowed = currentView !== 'owner-requests' || hasRole(user, 'admin') || hasRole(user, 'owner');
+  const activeView = approvalRoleAllowed && (!activeViewPermission || hasPermission(activeViewPermission)) ? currentView : 'dashboard';
 
   // ── Render Current Page ─────────────────────────────────
 
@@ -790,6 +799,13 @@ const AppInner: React.FC = () => {
         return (
           <PageWrapper>
             <AuditLogsPage {...props} />
+          </PageWrapper>
+        );
+
+      case 'owner-requests':
+        return (
+          <PageWrapper>
+            <OwnerApprovalRequestsPage {...props} />
           </PageWrapper>
         );
 

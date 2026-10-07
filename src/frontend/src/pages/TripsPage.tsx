@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { tripsAPI, routesAPI, driversAPI, vehiclesAPI, bookingsAPI } from '../services/api';
 import { Card, Table, Tr, Td, Pagination, Button, LoadingState, ErrorState } from '../components/ui';
+import { useAuth } from '../contexts/AuthContext';
+import { hasRole } from '../utils/roles';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -34,6 +36,9 @@ interface TripsPageProps {
 }
 
 export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
+  const { user, hasPermission } = useAuth();
+  const isOwner = hasRole(user, 'owner');
+  const canViewTripDetails = !isOwner || hasPermission('bookings.read');
   const [trips, setTrips] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -152,27 +157,59 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
   }, [page, searchId, fromDate, toDate, routeFilter, statusFilter]);
 
   const loadDropdowns = async () => {
-    try {
-      const [rRes, dRes, vRes] = await Promise.all([
-        routesAPI.list({ limit: 100 }),
-        driversAPI.list({ limit: 100 }),
-        vehiclesAPI.list({ limit: 100 }),
-      ]);
-      setRoutes(rRes.data.data || []);
-      setDrivers(dRes.data.data || []);
-      setVehicles(vRes.data.data || []);
-    } catch {
-      // ignore
+    if (isOwner) {
+      try {
+        const response = await tripsAPI.assignmentOptions();
+        const ownerDrivers = response.data.data?.drivers || [];
+        const ownerVehicles = response.data.data?.vehicles || [];
+        if (ownerDrivers.length && ownerVehicles.length) {
+          setDrivers(ownerDrivers);
+          setVehicles(ownerVehicles);
+        } else {
+          const [driversResult, vehiclesResult] = await Promise.allSettled([
+            ownerDrivers.length ? Promise.resolve({ data: { data: ownerDrivers } }) : driversAPI.list({ limit: 100 }),
+            ownerVehicles.length ? Promise.resolve({ data: { data: ownerVehicles } }) : vehiclesAPI.list({ limit: 100 }),
+          ]);
+          setDrivers(driversResult.status === 'fulfilled' ? driversResult.value.data.data || [] : ownerDrivers);
+          setVehicles(vehiclesResult.status === 'fulfilled' ? vehiclesResult.value.data.data || [] : ownerVehicles);
+        }
+      } catch {
+        const [driversResult, vehiclesResult] = await Promise.allSettled([
+          driversAPI.list({ limit: 100 }),
+          vehiclesAPI.list({ limit: 100 }),
+        ]);
+        setDrivers(driversResult.status === 'fulfilled' ? driversResult.value.data.data || [] : []);
+        setVehicles(vehiclesResult.status === 'fulfilled' ? vehiclesResult.value.data.data || [] : []);
+      }
+      setRoutes([]);
+      return;
     }
+
+    const [routesResult, driversResult, vehiclesResult] = await Promise.allSettled([
+      routesAPI.list({ limit: 100 }),
+      driversAPI.list({ limit: 100 }),
+      vehiclesAPI.list({ limit: 100 }),
+    ]);
+    setRoutes(routesResult.status === 'fulfilled' ? routesResult.value.data.data || [] : []);
+    setDrivers(driversResult.status === 'fulfilled' ? driversResult.value.data.data || [] : []);
+    setVehicles(vehiclesResult.status === 'fulfilled' ? vehiclesResult.value.data.data || [] : []);
   };
 
   useEffect(() => {
     fetchTrips();
     loadDropdowns();
-  }, [fetchTrips]);
+  }, [fetchTrips, isOwner]);
+
+  useEffect(() => {
+    if (isOwner && !canViewTripDetails) {
+      setInfoTrip(null);
+      setActionModal(null);
+    }
+  }, [isOwner, canViewTripDetails]);
 
   // Open trip dashboard with full data
   const handleOpenTripDashboard = async (trip: any) => {
+    if (!canViewTripDetails) return;
     setLoadingBookings(true);
     try {
       const tripResp = await tripsAPI.show(trip.id);
@@ -245,11 +282,11 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
 
   // Change driver
   const handleApplyDriver = async () => {
-    if (!infoTrip || !selectedNewDriver) return;
+    if (!infoTrip || !selectedNewDriver || !canViewTripDetails) return;
     setUpdatingAction(true);
     try {
-      await tripsAPI.assignDriver(infoTrip.id, parseInt(selectedNewDriver));
-      onNotify('Driver reassigned successfully');
+      const response = await tripsAPI.assignDriver(infoTrip.id, parseInt(selectedNewDriver));
+      onNotify(response.data.message || (isOwner ? 'Driver assignment request submitted' : 'Driver reassigned successfully'));
       const updatedTrip = await tripsAPI.show(infoTrip.id);
       setInfoTrip(updatedTrip.data.data);
       setActionModal(null);
@@ -263,11 +300,11 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
 
   // Change vehicle
   const handleApplyVehicle = async () => {
-    if (!infoTrip || !selectedNewVehicle) return;
+    if (!infoTrip || !selectedNewVehicle || !canViewTripDetails) return;
     setUpdatingAction(true);
     try {
-      await tripsAPI.assignVehicle(infoTrip.id, parseInt(selectedNewVehicle));
-      onNotify('Vehicle reassigned successfully');
+      const response = await tripsAPI.assignVehicle(infoTrip.id, parseInt(selectedNewVehicle));
+      onNotify(response.data.message || (isOwner ? 'Vehicle assignment request submitted' : 'Vehicle reassigned successfully'));
       const updatedTrip = await tripsAPI.show(infoTrip.id);
       setInfoTrip(updatedTrip.data.data);
       setActionModal(null);
@@ -684,14 +721,16 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
                     </Td>
 
                     <Td>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenTripDashboard(trip)}
-                        className="px-3 py-1 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm transition-colors"
-                      >
-                        <Info size={14} className="inline mr-1" />
-                        Details
-                      </button>
+                      {canViewTripDetails ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenTripDashboard(trip)}
+                          className="px-3 py-1 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm transition-colors"
+                        >
+                          <Info size={14} className="inline mr-1" />
+                          Details
+                        </button>
+                      ) : <span className="text-xs text-slate-500">Details restricted</span>}
                     </Td>
                   </Tr>
                 );
@@ -710,7 +749,7 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
       </Card>
 
       {/* Trip Dashboard Modal */}
-      {infoTrip && (
+      {infoTrip && canViewTripDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm overflow-y-auto">
           <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in fade-in zoom-in duration-200">
 
@@ -742,7 +781,7 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
               {/* Action Buttons */}
               <div className="flex flex-col items-end gap-2">
                 <div className="flex items-center gap-2">
-                  <button
+                  {!isOwner && <button
                     onClick={() => {
                       setRescheduleDate(infoTrip.trip_date || '');
                       setRescheduleTime(infoTrip.departure_time || '');
@@ -752,8 +791,8 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
                   >
                     <Calendar size={14} className="inline mr-1" />
                     Reschedule
-                  </button>
-                  <button
+                  </button>}
+                  {canViewTripDetails && <button
                     onClick={() => {
                       setSelectedNewDriver(infoTrip.driver_id ? String(infoTrip.driver_id) : '');
                       setActionModal('driver');
@@ -762,8 +801,8 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
                   >
                     <UserCheck size={14} className="inline mr-1" />
                     Change Driver
-                  </button>
-                  <button
+                  </button>}
+                  {canViewTripDetails && <button
                     onClick={() => {
                       setSelectedNewVehicle(infoTrip.vehicle_id ? String(infoTrip.vehicle_id) : '');
                       setActionModal('vehicle');
@@ -772,7 +811,7 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
                   >
                     <Truck size={14} className="inline mr-1" />
                     Change Vehicle
-                  </button>
+                  </button>}
                   <button
                     onClick={() => setInfoTrip(null)}
                     className="w-7 h-7 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-slate-800 dark:hover:text-white"
@@ -782,7 +821,7 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
                 </div>
 
                 {/* Trip Controls */}
-                <div className="flex items-center gap-2">
+                {!isOwner && <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleStatusChange(infoTrip.id, 'Scheduled')}
                     className="px-3 py-1 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -807,7 +846,7 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
                   >
                     Cancel
                   </button>
-                </div>
+                </div>}
               </div>
             </div>
 
@@ -1066,7 +1105,7 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
                 onChange={(e) => setSelectedNewDriver(e.target.value)}
                 className="w-full px-4 py-3 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
               >
-                <option value="">Select a driver</option>
+                <option value="">{drivers.length ? 'Select a driver' : 'No fleet drivers found'}</option>
                 {drivers.map(d => (
                   <option key={d.id} value={d.id}>{d.name} ({d.mobile})</option>
                 ))}
@@ -1074,7 +1113,7 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
             </div>
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
               <Button size="sm" variant="ghost" onClick={() => setActionModal(null)}>Cancel</Button>
-              <Button size="sm" onClick={handleApplyDriver} loading={updatingAction} className="bg-emerald-600 hover:bg-emerald-700">Confirm Driver</Button>
+              <Button size="sm" onClick={handleApplyDriver} loading={updatingAction} disabled={!selectedNewDriver} className="bg-emerald-600 hover:bg-emerald-700">Confirm Driver</Button>
             </div>
           </div>
         </div>
@@ -1100,7 +1139,7 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
                 onChange={(e) => setSelectedNewVehicle(e.target.value)}
                 className="w-full px-4 py-3 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
               >
-                <option value="">Select a vehicle</option>
+                <option value="">{vehicles.length ? 'Select a vehicle' : 'No fleet vehicles found'}</option>
                 {vehicles.map(v => (
                   <option key={v.id} value={v.id}>{v.registration_number || v.vehicle_number} ({v.bus_type?.name || 'Bus'})</option>
                 ))}
@@ -1108,7 +1147,7 @@ export const TripsPage: React.FC<TripsPageProps> = ({ onNotify }) => {
             </div>
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
               <Button size="sm" variant="ghost" onClick={() => setActionModal(null)}>Cancel</Button>
-              <Button size="sm" onClick={handleApplyVehicle} loading={updatingAction} className="bg-purple-600 hover:bg-purple-700">Confirm Vehicle</Button>
+              <Button size="sm" onClick={handleApplyVehicle} loading={updatingAction} disabled={!selectedNewVehicle} className="bg-purple-600 hover:bg-purple-700">Confirm Vehicle</Button>
             </div>
           </div>
         </div>

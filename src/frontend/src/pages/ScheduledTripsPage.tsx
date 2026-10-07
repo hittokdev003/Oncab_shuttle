@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Download, Upload, Eye, FileSpreadsheet, X, CheckCircle2, Clock, Calendar, RefreshCw, Zap } from 'lucide-react';
 import { tripsAPI, routesAPI, driversAPI, vehiclesAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { hasRole } from '../utils/roles';
 import { Card, Table, Tr, Td, Pagination, Button, StatusBadge, ConfirmDialog, ErrorState, Modal } from '../components/ui';
 
 interface ScheduledTripsPageProps {
@@ -18,6 +20,9 @@ const DAYS_OF_WEEK = [
 ];
 
 export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify }) => {
+  const { user, hasPermission } = useAuth();
+  const isOwner = hasRole(user, 'owner');
+  const canRequestAssignment = !isOwner || hasPermission('bookings.read');
   const [schedules, setSchedules] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -78,23 +83,29 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
 
   const loadDropdowns = async () => {
     try {
-      const [rRes, dRes, vRes] = await Promise.all([
-        routesAPI.list({ limit: 100 }),
+      const [dRes, vRes] = await Promise.all([
         driversAPI.list({ limit: 100 }),
         vehiclesAPI.list({ limit: 100 }),
       ]);
-      setRoutes(rRes.data.data || []);
       setDrivers(dRes.data.data || []);
       setVehicles(vRes.data.data || []);
     } catch {
       // ignore
+    }
+    if (!isOwner) {
+      try {
+        const routeResponse = await routesAPI.list({ limit: 100 });
+        setRoutes(routeResponse.data.data || []);
+      } catch {
+        setRoutes([]);
+      }
     }
   };
 
   useEffect(() => {
     fetchSchedules();
     loadDropdowns();
-  }, [fetchSchedules]);
+  }, [fetchSchedules, isOwner]);
 
   // Operating Days helpers
   const handleToggleDay = (dayId: string) => {
@@ -305,15 +316,17 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
     setEditSchedule(schedule);
     const opArr = schedule.operating_days ? String(schedule.operating_days).split(/[,;\s]+/) : ['1', '2', '3', '4', '5'];
     setEditForm({
-      schedule_code: schedule.schedule_code,
-      route_id: String(schedule.route_id || ''),
       driver_id: String(schedule.driver_id || ''),
       vehicle_id: String(schedule.vehicle_id || ''),
-      departure_time: schedule.departure_time || '',
-      valid_from: schedule.valid_from || '',
-      valid_until: schedule.valid_until || '',
-      operating_days: opArr,
-      status: schedule.status || 'Scheduled',
+      ...(!isOwner ? {
+        schedule_code: schedule.schedule_code,
+        route_id: String(schedule.route_id || ''),
+        departure_time: schedule.departure_time || '',
+        valid_from: schedule.valid_from || '',
+        valid_until: schedule.valid_until || '',
+        operating_days: opArr,
+        status: schedule.status || 'Scheduled',
+      } : {}),
     });
   };
 
@@ -321,14 +334,20 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
     if (!editSchedule) return;
     setSavingEdit(true);
     try {
-      await tripsAPI.update(editSchedule.id, {
-        ...editForm,
-        route_id: parseInt(editForm.route_id),
-        driver_id: editForm.driver_id ? parseInt(editForm.driver_id) : null,
-        vehicle_id: editForm.vehicle_id ? parseInt(editForm.vehicle_id) : null,
-        operating_days: Array.isArray(editForm.operating_days) ? editForm.operating_days.join(',') : editForm.operating_days,
-      });
-      onNotify('Schedule updated successfully');
+      const payload = isOwner
+        ? {
+          driver_id: editForm.driver_id ? parseInt(editForm.driver_id) : null,
+          vehicle_id: editForm.vehicle_id ? parseInt(editForm.vehicle_id) : null,
+        }
+        : {
+          ...editForm,
+          route_id: parseInt(editForm.route_id),
+          driver_id: editForm.driver_id ? parseInt(editForm.driver_id) : null,
+          vehicle_id: editForm.vehicle_id ? parseInt(editForm.vehicle_id) : null,
+          operating_days: Array.isArray(editForm.operating_days) ? editForm.operating_days.join(',') : editForm.operating_days,
+        };
+      const response = await tripsAPI.update(editSchedule.id, payload);
+      onNotify(response.data.message || (isOwner ? 'Assignment request sent for admin approval' : 'Schedule updated successfully'));
       setEditSchedule(null);
       fetchSchedules();
     } catch (err: any) {
@@ -356,7 +375,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
   return (
     <div className="space-y-5">
       {/* ── Card 1: Create Master & Recurring Trip Schedule ── */}
-      <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+      {!isOwner && <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -562,10 +581,10 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
             </div>
           </div>
         </form>
-      </div>
+      </div>}
 
       {/* ── Card 2: Cityflo-Style Future Trip Instance Generator ── */}
-      <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-indigo-200/80 dark:border-indigo-800/40 text-slate-900 dark:text-white shadow-sm space-y-4 transition-colors">
+      {!isOwner && <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-indigo-200/80 dark:border-indigo-800/40 text-slate-900 dark:text-white shadow-sm space-y-4 transition-colors">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -650,10 +669,10 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
             </button>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* ── Card 3: Bulk CSV Import ── */}
-      <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+      {!isOwner && <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
         <div>
           <h3 className="text-base font-bold text-slate-900 dark:text-white">
             Bulk CSV Master Schedule Upload
@@ -746,7 +765,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ── Scheduled Trips Table ── */}
       <Card padding={false}>
@@ -814,12 +833,12 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1.5">
-                      <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(schedule)}>
+                      {canRequestAssignment && <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(schedule)}>
                         <Edit2 size={13} />
-                      </Button>
-                      <Button variant="danger" size="sm" onClick={() => setDeleteTarget(schedule)}>
+                      </Button>}
+                      {!isOwner && <Button variant="danger" size="sm" onClick={() => setDeleteTarget(schedule)}>
                         <Trash2 size={13} />
-                      </Button>
+                      </Button>}
                     </div>
                   </Td>
                 </Tr>
@@ -842,10 +861,11 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
         <Modal
           open={!!editSchedule}
           onClose={() => setEditSchedule(null)}
-          title={`Edit Master Schedule: ${editSchedule.schedule_code}`}
+          title={isOwner ? 'Request Assignment Change' : `Edit Master Schedule: ${editSchedule.schedule_code}`}
         >
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {!isOwner && <>
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">ROUTE</label>
                 <select
@@ -897,6 +917,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 </select>
               </div>
 
+              {!isOwner && <>
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">VALID FROM</label>
                 <input
@@ -906,6 +927,8 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                   className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
                 />
               </div>
+              </>}
+              </>}
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">VALID UNTIL</label>
@@ -920,7 +943,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
 
             <div className="flex justify-end gap-2 pt-3">
               <Button variant="ghost" onClick={() => setEditSchedule(null)}>Cancel</Button>
-              <Button variant="primary" loading={savingEdit} onClick={handleSaveEdit}>Save Changes</Button>
+              <Button variant="primary" loading={savingEdit} onClick={handleSaveEdit}>{isOwner ? 'Request Approval' : 'Save Changes'}</Button>
             </div>
           </div>
         </Modal>

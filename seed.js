@@ -148,6 +148,9 @@ const seedDatabase = async () => {
       'vehicles.read',
       'vehicles.manage',
       'locations.read',
+      'trips.read',
+      'trips.manage',
+      'schedules.read',
       'bookings.read',
       'reports.read',
     ]);

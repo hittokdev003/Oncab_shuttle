@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, FileText, AlertTriangle, Upload, FilePlus, Calenda
 import { driversAPI, rolesAPI, usersAPI, vehiclesAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, Table, Tr, Td, Pagination, SearchInput, Button, Select, StatusBadge, Modal, Input, ConfirmDialog, ErrorState, Badge } from '../components/ui';
+import { hasRole } from '../utils/roles';
 
 interface Vehicle {
   id: number;
@@ -44,7 +45,7 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 15 });
   const { user } = useAuth();
-  const isOwner = user?.role?.name === 'owner';
+  const isOwner = hasRole(user, 'owner');
 
   // Vehicle modal
   const [showModal, setShowModal] = useState(false);
@@ -250,7 +251,7 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
   const duplicateDocType = Boolean(selectedDocVehicle?.documents?.some((document: any) =>
     document.doc_type === docForm.doc_type && document.id !== editDocument?.id
   ));
-  const canManageVehicleDocuments = !isOwner;
+  const canManageVehicleDocuments = true;
 
   const handleSaveVehicle = async () => {
     if (!form.registration_number) {
@@ -271,11 +272,11 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
         total_seats: Number(form.total_seats || 0),
       };
       if (editVehicle) {
-        await vehiclesAPI.update(editVehicle.id, payload);
-        onNotify('Vehicle updated successfully');
+        const response = await vehiclesAPI.update(editVehicle.id, payload);
+        onNotify(response.data.message || 'Vehicle updated successfully');
       } else {
-        await vehiclesAPI.create(payload);
-        onNotify('Vehicle created successfully');
+        const response = await vehiclesAPI.create(payload);
+        onNotify(response.data.message || 'Vehicle created successfully');
       }
       setShowModal(false);
       fetchVehicles();
@@ -347,22 +348,6 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
     }
   };
 
-  if (showDocs && isOwner) {
-    return (
-      <div className="space-y-5">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="text-amber-400 mt-0.5" size={18} />
-            <div>
-              <h2 className="text-lg font-semibold text-white">Document access restricted</h2>
-              <p className="text-sm text-slate-300 mt-1">Owners can manage their own vehicles and assignments, but they cannot view or edit vehicle documents.</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
   // If showing standalone "Vehicle Documents" view
   if (showDocs) {
     return (
@@ -372,7 +357,8 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
             <h2 className="text-xl font-bold text-white tracking-tight">Vehicle Documents & Compliance</h2>
             <p className="text-slate-400 text-sm">Track insurance, fitness certificates, permits, and expiry renewals</p>
           </div>
-          <Button onClick={() => openAddDocument()} icon={FilePlus}>
+          <Button onClick={() => openAddDocument()}>
+            <FilePlus size={14} />
             + Add Document
           </Button>
         </div>
@@ -592,7 +578,8 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
               <Button variant="ghost" type="button" onClick={() => setShowDocModal(false)}>
                 Cancel
               </Button>
-              <Button type="submit" loading={savingDoc} icon={Upload}>
+              <Button type="submit" loading={savingDoc}>
+                <Upload size={14} />
                 {editDocument ? 'Update Document' : 'Save Document'}
               </Button>
             </div>
@@ -611,11 +598,13 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
         </div>
         <div className="flex items-center gap-3">
           {canManageVehicleDocuments && (
-            <Button variant="secondary" onClick={() => openAddDocument()} icon={FilePlus}>
+            <Button variant="secondary" onClick={() => openAddDocument()}>
+              <FilePlus size={14} />
               + Add Document
             </Button>
           )}
-          <Button onClick={openCreate} icon={Plus}>
+          <Button onClick={openCreate}>
+            <Plus size={14} />
             Add Vehicle
           </Button>
         </div>
@@ -655,8 +644,8 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
               <Button
                 size="sm"
                 onClick={() => openAddDocument(selectedVehicleForDocs)}
-                icon={FilePlus}
               >
+                <FilePlus size={14} />
                 Add Document
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setSelectedVehicleForDocs(null)}>
@@ -786,7 +775,6 @@ export const VehiclesPage: React.FC<VehiclesPageProps> = ({ onNotify, showDocs }
                           variant="ghost"
                           size="sm"
                           onClick={() => openAddDocument(v)}
-                          title="Upload document"
                         >
                           <FilePlus size={14} className="text-indigo-400" />
                         </Button>

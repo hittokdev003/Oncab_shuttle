@@ -1,5 +1,7 @@
 'use strict';
 
+const { hasRole } = require('../utils/roles');
+
 const { Op } = require('sequelize');
 const { Vehicle, DriverDetail, Trip, Route, Stop, Driver } = require('../models');
 
@@ -25,7 +27,7 @@ const findNearestStop = (latitude, longitude, stops) => {
 exports.dashboard = async (req, res, next) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const isOwner = req.user?.role?.name === 'owner';
+    const isOwner = hasRole(req.user, 'owner');
     const ownerVehicleWhere = isOwner ? { owner_id: req.user.id } : {};
     const ownerDriverWhere = isOwner ? { owner_id: req.user.id } : {};
     const [vehicles, trips, routes] = await Promise.all([

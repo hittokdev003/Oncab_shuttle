@@ -3,14 +3,15 @@
 const { Op, fn, col, literal } = require('sequelize');
 const { Booking, Trip, Driver, Vehicle, Passenger, CustomerUser, Payment, Refund, Route, AuditLog } = require('../models');
 const sequelize = require('../config/database');
+const { hasRole } = require('../utils/roles');
 
 // ── Dashboard Stats ────────────────────────────────────────
 exports.stats = async (req, res, next) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const thisMonth = new Date(); thisMonth.setDate(1);
-    const isAdmin = req.user?.role?.name === 'admin';
-    const isOwner = req.user?.role?.name === 'owner';
+    const isAdmin = hasRole(req.user, 'admin');
+    const isOwner = hasRole(req.user, 'owner');
     const ownerVehicleWhere = isOwner ? { owner_id: req.user.id } : {};
     const ownerDriverWhere = isOwner ? { owner_id: req.user.id } : {};
     const ownedVehicleRows = isOwner ? await Vehicle.findAll({ attributes: ['id'], where: ownerVehicleWhere, raw: true }) : [];

@@ -1,8 +1,73 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Trip, Route, Stop, Driver, Vehicle, BusType, Booking } = require('../models');
+const { Trip, Route, Stop, Driver, Vehicle, BusType, Booking, OwnerApprovalRequest } = require('../models');
 const { logAction } = require('../middleware/auditLog');
+const { hasRole } = require('../utils/roles');
+
+const isOwnerRole = (req) => hasRole(req.user, 'owner');
+const ownerCanReadBookings = (req) => (req.userPermissions || []).some((permission) => ['bookings.read', 'bookings.manage'].includes(permission));
+
+const requireOwnerBookingAccess = (req, res) => {
+  if (!isOwnerRole(req) || ownerCanReadBookings(req)) return true;
+  res.status(403).json({ success: false, message: 'Booking access is required to request assignment changes' });
+  return false;
+};
+
+const submitOwnerAssignmentRequest = async (req, res, trip) => {
+  if (!requireOwnerBookingAccess(req, res)) return;
+  const assignmentFields = ['driver_id', 'vehicle_id'];
+  const submittedFields = Object.keys(req.body || {});
+  if (!submittedFields.some((field) => assignmentFields.includes(field))
+    || submittedFields.some((field) => !assignmentFields.includes(field))) {
+    return res.status(403).json({ success: false, message: 'Owners can only request trip driver or vehicle changes' });
+  }
+
+  const payload = {};
+  let ownsCurrentAssignment = false;
+  if (trip.driver_id) {
+    const currentDriver = await Driver.findByPk(trip.driver_id);
+    ownsCurrentAssignment = Number(currentDriver?.owner_id) === Number(req.user.id);
+  }
+  if (trip.vehicle_id) {
+    const currentVehicle = await Vehicle.findByPk(trip.vehicle_id);
+    ownsCurrentAssignment = ownsCurrentAssignment || Number(currentVehicle?.owner_id) === Number(req.user.id);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body, 'driver_id')) {
+    const driverId = req.body.driver_id ? Number(req.body.driver_id) : null;
+    if (driverId) {
+      const driver = await Driver.findOne({ where: { id: driverId, owner_id: req.user.id } });
+      if (!driver) return res.status(403).json({ success: false, message: 'Select a driver from your own fleet' });
+      ownsCurrentAssignment = true;
+    }
+    payload.driver_id = driverId;
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body, 'vehicle_id')) {
+    const vehicleId = req.body.vehicle_id ? Number(req.body.vehicle_id) : null;
+    if (vehicleId) {
+      const vehicle = await Vehicle.findOne({ where: { id: vehicleId, owner_id: req.user.id } });
+      if (!vehicle) return res.status(403).json({ success: false, message: 'Select a vehicle from your own fleet' });
+      ownsCurrentAssignment = true;
+    }
+    payload.vehicle_id = vehicleId;
+  }
+  if (!ownsCurrentAssignment) {
+    return res.status(403).json({ success: false, message: 'This trip is not assigned to your fleet' });
+  }
+
+  const approvalRequest = await OwnerApprovalRequest.create({
+    owner_id: req.user.id,
+    request_type: 'trip_assignment',
+    target_id: trip.id,
+    payload: JSON.stringify(payload),
+  });
+  return res.status(202).json({
+    success: true,
+    message: 'Trip assignment request sent to admin for approval',
+    data: approvalRequest,
+  });
+};
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -12,8 +77,8 @@ const buildPagination = (page, limit) => {
 
 const TRIP_INCLUDE = [
   { model: Route, as: 'route', attributes: ['id', 'route_name', 'route_code', 'origin_city', 'destination_city'] },
-  { model: Driver, as: 'driver', attributes: ['id', 'name', 'mobile', 'photo'] },
-  { model: Vehicle, as: 'vehicle', attributes: ['id', 'registration_number', 'company_model', 'color'] },
+  { model: Driver, as: 'driver', attributes: ['id', 'owner_id', 'name', 'mobile', 'photo'] },
+  { model: Vehicle, as: 'vehicle', attributes: ['id', 'owner_id', 'registration_number', 'company_model', 'color'] },
   { model: BusType, as: 'bus_type', attributes: ['id', 'name', 'total_seats'] },
 ];
 
@@ -26,6 +91,12 @@ const TRIP_DETAILS_INCLUDE = [
   },
   ...TRIP_INCLUDE.filter((include) => include.as !== 'route'),
 ];
+
+const scopeTripIncludes = (req, includes) => includes.map((include) => {
+  if (!isOwnerRole(req) || !['driver', 'vehicle'].includes(include.as)) return include;
+  const Model = include.as === 'driver' ? Driver : Vehicle;
+  return { ...include, model: Model, where: { owner_id: req.user.id }, required: false };
+});
 
 // ── Helper to normalize date string to YYYY-MM-DD ──────────
 const normalizeDateStr = (dateStr) => {
@@ -158,7 +229,7 @@ exports.list = async (req, res, next) => {
     const targetFrom = from_date || trip_date || new Date().toISOString().split('T')[0];
     const targetTo = to_date || trip_date || targetFrom;
 
-    if (targetFrom && targetTo) {
+    if (targetFrom && targetTo && !isOwnerRole(req)) {
       await ensureTripInstancesForRange(targetFrom, targetTo);
     }
 
@@ -179,9 +250,20 @@ exports.list = async (req, res, next) => {
     if (from_date && !to_date) where.trip_date = { [Op.gte]: from_date };
     if (to_date && !from_date) where.trip_date = { [Op.lte]: to_date };
 
+    if (isOwnerRole(req)) {
+      const [ownedDrivers, ownedVehicles] = await Promise.all([
+        Driver.findAll({ attributes: ['id'], where: { owner_id: req.user.id }, raw: true }),
+        Vehicle.findAll({ attributes: ['id'], where: { owner_id: req.user.id }, raw: true }),
+      ]);
+      where[Op.or] = [
+        { driver_id: { [Op.in]: ownedDrivers.map((driver) => driver.id) } },
+        { vehicle_id: { [Op.in]: ownedVehicles.map((vehicle) => vehicle.id) } },
+      ];
+    }
+
     const { count, rows } = await Trip.findAndCountAll({
       where,
-      include: TRIP_INCLUDE,
+      include: scopeTripIncludes(req, TRIP_INCLUDE),
       offset, limit: lim,
       order: [['trip_date', 'DESC'], ['departure_time', 'ASC']],
     });
@@ -194,8 +276,16 @@ exports.list = async (req, res, next) => {
 // ── Get Trip ───────────────────────────────────────────────
 exports.show = async (req, res, next) => {
   try {
-    const trip = await Trip.findByPk(req.params.id, { include: TRIP_DETAILS_INCLUDE });
+    const trip = await Trip.findByPk(req.params.id, { include: scopeTripIncludes(req, TRIP_DETAILS_INCLUDE) });
     if (!trip) return res.status(404).json({ success: false, message: 'Trip not found' });
+    if (isOwnerRole(req)) {
+      if (!ownerCanReadBookings(req)) {
+        return res.status(403).json({ success: false, message: 'Booking access is required to view trip details' });
+      }
+      const ownsDriver = trip.driver && Number(trip.driver.owner_id) === Number(req.user.id);
+      const ownsVehicle = trip.vehicle && Number(trip.vehicle.owner_id) === Number(req.user.id);
+      if (!ownsDriver && !ownsVehicle) return res.status(403).json({ success: false, message: 'This trip is not assigned to your fleet' });
+    }
     const bookingsCount = await Booking.count({ where: { trip_id: trip.id, booking_status: { [Op.ne]: 'cancelled' } } });
     res.json({ success: true, data: { ...trip.toJSON(), bookings_count: bookingsCount } });
   } catch (err) {
@@ -203,9 +293,34 @@ exports.show = async (req, res, next) => {
   }
 };
 
+exports.assignmentOptions = async (req, res, next) => {
+  try {
+    if (!isOwnerRole(req)) {
+      return res.status(403).json({ success: false, message: 'Owner role required' });
+    }
+    const [drivers, vehicles] = await Promise.all([
+      Driver.findAll({
+        attributes: ['id', 'name', 'mobile'],
+        where: { owner_id: req.user.id },
+        order: [['name', 'ASC']],
+      }),
+      Vehicle.findAll({
+        attributes: ['id', 'registration_number', 'company_model', 'bus_type_id'],
+        where: { owner_id: req.user.id },
+        include: [{ model: BusType, as: 'bus_type', attributes: ['id', 'name'] }],
+        order: [['registration_number', 'ASC']],
+      }),
+    ]);
+    return res.json({ success: true, data: { drivers, vehicles } });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 // ── Create Trip ────────────────────────────────────────────
 exports.create = async (req, res, next) => {
   try {
+    if (isOwnerRole(req)) return res.status(403).json({ success: false, message: 'Owners cannot create trips directly' });
     let { schedule_code, route_id, bus_type_id, departure_time, arrival_time, operating_days, trip_date, valid_from, valid_until, driver_id, vehicle_id, notes } = req.body;
     const exists = await Trip.findOne({ where: { schedule_code } });
     if (exists) return res.status(409).json({ success: false, message: 'Schedule code already exists' });
@@ -235,8 +350,10 @@ exports.create = async (req, res, next) => {
 // ── Update Trip ────────────────────────────────────────────
 exports.update = async (req, res, next) => {
   try {
+    if (!requireOwnerBookingAccess(req, res)) return;
     const trip = await Trip.findByPk(req.params.id);
     if (!trip) return res.status(404).json({ success: false, message: 'Trip not found' });
+    if (isOwnerRole(req)) return submitOwnerAssignmentRequest(req, res, trip);
     const payload = { ...req.body };
     if (!payload.bus_type_id && payload.vehicle_id) {
       const vehicle = await Vehicle.findByPk(payload.vehicle_id);
@@ -255,6 +372,7 @@ exports.update = async (req, res, next) => {
 // ── Delete Trip ────────────────────────────────────────────
 exports.destroy = async (req, res, next) => {
   try {
+    if (isOwnerRole(req)) return res.status(403).json({ success: false, message: 'Owners cannot delete trips' });
     const trip = await Trip.findByPk(req.params.id);
     if (!trip) return res.status(404).json({ success: false, message: 'Trip not found' });
     const bookingsCount = await Booking.count({ where: { trip_id: trip.id } });
@@ -269,6 +387,7 @@ exports.destroy = async (req, res, next) => {
 // ── Update Trip Status ─────────────────────────────────────
 exports.updateStatus = async (req, res, next) => {
   try {
+    if (isOwnerRole(req)) return res.status(403).json({ success: false, message: 'Only admins and operators can change trip status' });
     const trip = await Trip.findByPk(req.params.id);
     if (!trip) return res.status(404).json({ success: false, message: 'Trip not found' });
     const { status } = req.body;
@@ -285,8 +404,10 @@ exports.updateStatus = async (req, res, next) => {
 // ── Assign Driver ──────────────────────────────────────────
 exports.assignDriver = async (req, res, next) => {
   try {
+    if (!requireOwnerBookingAccess(req, res)) return;
     const trip = await Trip.findByPk(req.params.id);
     if (!trip) return res.status(404).json({ success: false, message: 'Trip not found' });
+    if (isOwnerRole(req)) return submitOwnerAssignmentRequest(req, res, trip);
     const { driver_id } = req.body;
     const driver = await Driver.findByPk(driver_id);
     if (!driver) return res.status(404).json({ success: false, message: 'Driver not found' });
@@ -300,8 +421,10 @@ exports.assignDriver = async (req, res, next) => {
 // ── Assign Vehicle ─────────────────────────────────────────
 exports.assignVehicle = async (req, res, next) => {
   try {
+    if (!requireOwnerBookingAccess(req, res)) return;
     const trip = await Trip.findByPk(req.params.id);
     if (!trip) return res.status(404).json({ success: false, message: 'Trip not found' });
+    if (isOwnerRole(req)) return submitOwnerAssignmentRequest(req, res, trip);
     const { vehicle_id } = req.body;
     const vehicle = await Vehicle.findByPk(vehicle_id);
     if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
@@ -319,6 +442,7 @@ exports.assignVehicle = async (req, res, next) => {
 // ── Bulk Generate Future Trips Endpoint ───────────────────────
 exports.generateFutureTrips = async (req, res, next) => {
   try {
+    if (isOwnerRole(req)) return res.status(403).json({ success: false, message: 'Owners cannot generate trips' });
     const { start_date, end_date, days_ahead = 14, schedule_ids } = req.body || {};
 
     const today = new Date();

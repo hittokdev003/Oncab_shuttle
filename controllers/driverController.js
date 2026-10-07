@@ -1,8 +1,9 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { sequelize, Driver, DriverDetail, Vehicle } = require('../models');
+const { sequelize, Driver, DriverDetail, Vehicle, OwnerApprovalRequest } = require('../models');
 const { logAction } = require('../middleware/auditLog');
+const { hasRole } = require('../utils/roles');
 const {
     saveBase64File,
     deleteFile,
@@ -16,7 +17,7 @@ const buildPagination = (page, limit) => {
     return { offset: (p - 1) * l, limit: l, page: p };
 };
 
-const isOwnerRole = (req) => req.user && req.user.role && req.user.role.name === 'owner';
+const isOwnerRole = (req) => hasRole(req.user, 'owner');
 
 const forceOwnerScope = (req, where = {}) => {
     if (!isOwnerRole(req)) return where;
@@ -48,7 +49,11 @@ exports.list = async (req, res, next) => {
             where: ownerScopedWhere,
             include: [
                 { model: DriverDetail, as: 'details' },
-                { model: Vehicle, as: 'vehicles' },
+                {
+                    model: Vehicle,
+                    as: 'vehicles',
+                    ...(isOwnerRole(req) ? { where: { owner_id: req.user.id }, required: false } : {}),
+                },
             ],
             offset,
             limit: lim,
@@ -87,7 +92,14 @@ exports.list = async (req, res, next) => {
 exports.show = async (req, res, next) => {
     try {
         const driver = await Driver.findByPk(req.params.id, {
-            include: [{ model: DriverDetail, as: 'details' }, { model: Vehicle, as: 'vehicles' }],
+            include: [
+                { model: DriverDetail, as: 'details' },
+                {
+                    model: Vehicle,
+                    as: 'vehicles',
+                    ...(isOwnerRole(req) ? { where: { owner_id: req.user.id }, required: false } : {}),
+                },
+            ],
         });
         if (!driver) return res.status(404).json({ success: false, message: 'Driver not found' });
         if (isOwnerRole(req) && Number(driver.owner_id) !== Number(req.user.id)) {
@@ -118,28 +130,54 @@ exports.show = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   try {
         const { name, email, mobile, aadhar, pan, sex, address, status, aadhar_img, pan_img, details, is_bus_driver, preferred_bus_type_id, owner_id } = req.body;
-        if (is_bus_driver && !preferred_bus_type_id) {
-            return res.status(400).json({ success: false, message: 'Preferred bus type is required for bus drivers' });
+        const isBusDriver = is_bus_driver === true || is_bus_driver === 1 || is_bus_driver === '1' || is_bus_driver === 'true';
+        const normalizedSex = sex === '' ? null : sex;
+        const preferredBusTypeId = preferred_bus_type_id ? Number(preferred_bus_type_id) : null;
+        if (!name || !String(name).trim()) {
+            return res.status(400).json({ success: false, message: 'Driver name is required' });
+        }
+        if (normalizedSex != null && !['Male', 'Female', 'Other'].includes(normalizedSex)) {
+            return res.status(400).json({ success: false, message: 'sex must be Male, Female, Other, or empty' });
+        }
+        if (isBusDriver && (!Number.isInteger(preferredBusTypeId) || preferredBusTypeId < 1)) {
+            return res.status(400).json({ success: false, message: 'A valid preferred bus type is required for bus drivers' });
         }
         const ownerId = isOwnerRole(req) ? req.user.id : owner_id || null;
         if (isOwnerRole(req) && Number(ownerId) !== Number(req.user.id)) {
             return res.status(403).json({ success: false, message: 'Owner assignment is restricted to your own fleet' });
         }
-    const driver = await Driver.create({
-      name,
+        if (isOwnerRole(req)) {
+            const payload = {
+                ...req.body,
+                owner_id: req.user.id,
+                status: 'Pending',
+            };
+            delete payload.block_status;
+            delete payload.online_status;
+            delete payload.complete_status;
+            const request = await OwnerApprovalRequest.create({
+                owner_id: req.user.id,
+                request_type: 'driver_create',
+                payload: JSON.stringify(payload),
+            });
+            return res.status(202).json({ success: true, message: 'Driver request sent to admin for approval', data: request });
+        }
+        const createOptions = req.approvalTransaction ? { transaction: req.approvalTransaction } : {};
+        const driver = await Driver.create({
+            name: String(name).trim(),
       email,
       mobile,
             owner_id: ownerId,
-            vehicle_type_id: is_bus_driver ? 6 : undefined,
-            is_bus_driver: Boolean(is_bus_driver),
-            preferred_bus_type_id: is_bus_driver ? preferred_bus_type_id : null,
+                        vehicle_type_id: isBusDriver ? 6 : undefined,
+                        is_bus_driver: isBusDriver,
+                        preferred_bus_type_id: isBusDriver ? preferredBusTypeId : null,
       aadhar,
       pan,
-      sex,
+            sex: normalizedSex,
       address,
       status: status || 'Pending',
       created_by: req.user?.name,
-    });
+        }, createOptions);
 
     const driverFolder = `drivers/${driver.id}`;
 
@@ -175,10 +213,13 @@ exports.create = async (req, res, next) => {
         smart_card_img:
             savedPanImg,
     };
-    await DriverDetail.create(driverDetailsData);
+    await DriverDetail.create(driverDetailsData, createOptions);
 
     await logAction({ userId: req.user?.id, userType: req.user?.role?.name, userName: req.user?.name, action: 'create', module: 'drivers', entityType: 'Driver', entityId: driver.id, newValues: { name, mobile }, ipAddress: req.ip, description: `Created driver ${name}` });
-    const created = await Driver.findByPk(driver.id, { include: [{ model: DriverDetail, as: 'details' }] });
+    const created = await Driver.findByPk(driver.id, {
+        include: [{ model: DriverDetail, as: 'details' }],
+        ...createOptions,
+    });
     res.status(201).json({ success: true, message: 'Driver created', data: created });
   } catch (err) {
     next(err);
@@ -194,6 +235,17 @@ exports.update = async (req, res, next) => {
         }
         if (isOwnerRole(req) && Number(driver.owner_id) !== Number(req.user.id)) {
             return res.status(403).json({ success: false, message: 'You can only edit your own drivers' });
+        }
+        if (isOwnerRole(req)) {
+            const payload = { ...req.body, owner_id: req.user.id };
+            for (const field of ['status', 'block_status', 'online_status', 'complete_status', 'created_by']) delete payload[field];
+            const request = await OwnerApprovalRequest.create({
+                owner_id: req.user.id,
+                request_type: 'driver_update',
+                target_id: driver.id,
+                payload: JSON.stringify(payload),
+            });
+            return res.status(202).json({ success: true, message: 'Driver update sent to admin for approval', data: request });
         }
         if (req.body.is_bus_driver && !req.body.preferred_bus_type_id) {
             return res.status(400).json({ success: false, message: 'Preferred bus type is required for bus drivers' });
@@ -287,6 +339,7 @@ exports.update = async (req, res, next) => {
 // ── Delete Driver ──────────────────────────────────────────
 exports.destroy = async (req, res, next) => {
   try {
+        if (isOwnerRole(req)) return res.status(403).json({ success: false, message: 'Driver removal requires admin approval' });
     const driver = await Driver.findByPk(req.params.id);
     if (!driver) return res.status(404).json({ success: false, message: 'Driver not found' });
     deleteFolder(
@@ -302,6 +355,7 @@ exports.destroy = async (req, res, next) => {
 // ── Update Status ──────────────────────────────────────────
 exports.updateStatus = async (req, res, next) => {
   try {
+        if (isOwnerRole(req)) return res.status(403).json({ success: false, message: 'Only admins can update driver status' });
     const driver = await Driver.findByPk(req.params.id);
     if (!driver) return res.status(404).json({ success: false, message: 'Driver not found' });
     const { status, block_status, online_status, complete_status } = req.body;

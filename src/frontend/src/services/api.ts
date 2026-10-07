@@ -150,6 +150,7 @@ export const stopsAPI = {
 
 export const tripsAPI = {
   list: (params?: object) => api.get('/trips', { params }),
+  assignmentOptions: () => api.get('/trips/assignment-options'),
   show: (id: number) => api.get(`/trips/${id}`),
   create: (data: object) => api.post('/trips', data),
   update: (id: number, data: object) => api.put(`/trips/${id}`, data),
@@ -160,10 +161,17 @@ export const tripsAPI = {
   generateFuture: (data?: object) => api.post('/trips/generate-future', data || {}),
 };
 
+export const ownerApprovalAPI = {
+  submit: (data: object) => api.post('/owner-approval-requests', data),
+  mine: () => api.get('/owner-approval-requests/mine'),
+  list: (params?: object) => api.get('/owner-approval-requests', { params }),
+  review: (id: number, decision: 'approve' | 'reject', admin_note?: string) =>
+    api.patch(`/owner-approval-requests/${id}/review`, { decision, admin_note }),
+};
+
 export const bookingsAPI = {
   list: (params?: object) => api.get('/bookings', { params }),
   show: (id: number) => api.get(`/bookings/${id}`),
-  track: (id: number) => api.get(`/bookings/${id}/track`),
   create: (data: object) => api.post('/bookings', data),
   cancel: (id: number, reason?: string) => api.patch(`/bookings/${id}/cancel`, { cancellation_reason: reason }),
   updatePayment: (id: number, data: object) => api.patch(`/bookings/${id}/payment`, data),

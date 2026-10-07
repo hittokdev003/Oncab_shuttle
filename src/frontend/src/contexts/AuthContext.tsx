@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { hasRole } from '../utils/roles';
 
 interface User {
   id: number;
@@ -69,15 +70,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasPermission = useCallback((permission: string) => {
-    if (user?.role?.name === 'admin') return true;
+    if (hasRole(user, 'admin')) return true;
     if (permissions.includes(permission)) return true;
     return permissions.includes(`${permission.split('.')[0]}.manage`);
-  }, [permissions, user?.role?.name]);
+  }, [permissions, user]);
 
-  const hasRole = useCallback((role: string) => user?.role?.name === role, [user?.role?.name]);
+  const checkRole = useCallback((role: string) => hasRole(user, role), [user]);
 
   return (
-    <AuthContext.Provider value={{ user, permissions, isLoading, isAuthenticated: !!user, login, logout, hasPermission, hasRole, refreshUser }}>
+    <AuthContext.Provider value={{ user, permissions, isLoading, isAuthenticated: !!user, login, logout, hasPermission, hasRole: checkRole, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

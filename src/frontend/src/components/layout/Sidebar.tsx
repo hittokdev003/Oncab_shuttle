@@ -15,7 +15,7 @@ export type View =
   | 'rate-charts'
   | 'passengers' | 'bookings' | 'passes' | 'cancelled-tickets' | 'refunds'
   | 'failed-refunds' | 'paid-refunds' | 'payments' | 'notifications'
-  | 'coupons' | 'reports' | 'audit-logs' | 'settings';
+  | 'coupons' | 'reports' | 'audit-logs' | 'settings' | 'owner-requests';
 
 interface NavItem {
   id: View;
@@ -42,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'users', label: 'Users', icon: Users, permission: 'users.read' },
       { id: 'roles', label: 'Roles & Permissions', icon: Shield, permission: 'roles.read' },
+      { id: 'owner-requests', label: 'Approval Requests', icon: ClipboardList },
     ]
   },
   {
@@ -157,6 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const visibleGroups = NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter((item) =>
+      (item.id !== 'owner-requests' || ['admin', 'owner'].includes(user?.role?.name || '')) &&
       (item.id !== 'vehicle-docs' || user?.role?.name !== 'owner') &&
       (!item.permission || hasPermission(item.permission))
     ),

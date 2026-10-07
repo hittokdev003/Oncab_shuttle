@@ -6,6 +6,7 @@ import {
 import { dashboardAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { StatCard, Card, LoadingState, ErrorState, StatusBadge } from '../components/ui';
+import { hasRole } from '../utils/roles';
 
 interface DashboardStats {
   summary: {
@@ -33,8 +34,8 @@ export const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { user } = useAuth();
-  const isOwner = user?.role?.name === 'owner';
-  const isAdmin = user?.role?.name === 'admin';
+  const isOwner = hasRole(user, 'owner');
+  const isAdmin = hasRole(user, 'admin');
 
   const fetchStats = async () => {
     try {

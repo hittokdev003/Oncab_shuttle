@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, Phone, Mail, MapPin, Upload, Image, CheckCircle2, 
 import { driversAPI, rolesAPI, vehiclesAPI, usersAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, Table, Tr, Td, Pagination, SearchInput, Button, Select, StatusBadge, Modal, ConfirmDialog, LoadingState, ErrorState, EmptyState, Badge } from '../components/ui';
+import { hasRole } from '../utils/roles';
 
 interface Driver {
   id: number;
@@ -52,7 +53,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
   const [ownersLoadError, setOwnersLoadError] = useState('');
   const latestFetchId = useRef(0);
   const { user } = useAuth();
-  const isOwner = user?.role?.name === 'owner';
+  const isOwner = hasRole(user, 'owner');
 
   const [showModal, setShowModal] = useState(false);
   const [editDriver, setEditDriver] = useState<Driver | null>(null);
@@ -247,11 +248,11 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
         owner_id: isOwner ? Number(user?.id) : Number(form.owner_id),
       };
       if (editDriver) {
-        await driversAPI.update(editDriver.id, payload);
-        onNotify('Driver updated successfully');
+        const response = await driversAPI.update(editDriver.id, payload);
+        onNotify(response.data.message || 'Driver updated successfully');
       } else {
-        await driversAPI.create(payload);
-        onNotify('Driver created successfully');
+        const response = await driversAPI.create(payload);
+        onNotify(response.data.message || 'Driver created successfully');
       }
       setShowModal(false);
       await fetchDrivers();
@@ -295,7 +296,8 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
           <h2 className="text-xl font-bold text-white tracking-tight">Driver Management</h2>
           <p className="text-slate-400 text-sm">{pagination.total} drivers registered</p>
         </div>
-        <Button onClick={openCreate} icon={Plus}>
+        <Button onClick={openCreate}>
+          <Plus size={14} />
           Add New Driver
         </Button>
       </div>
@@ -441,22 +443,16 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                     </Td>
                     {/* Document Status Column */}
                     <Td>
-                      <button
-                        onClick={() =>
-                          handleStatusUpdate(
-                            driver,
-                            'complete_status',
-                            driver.complete_status === 'Complete' ? 'Incomplete' : 'Complete'
-                          )
-                        }
-                        title="Click to toggle Complete / Incomplete document status"
-                      >
+                      {isOwner ? (
                         <StatusBadge status={driver.complete_status || 'Incomplete'} />
-                      </button>
+                      ) : <button
+                        onClick={() => handleStatusUpdate(driver, 'complete_status', driver.complete_status === 'Complete' ? 'Incomplete' : 'Complete')}
+                        title="Click to toggle Complete / Incomplete document status">
+                        <StatusBadge status={driver.complete_status || 'Incomplete'} />
+                      </button>}
                     </Td>
                     <Td>
-                      {/* Status Dropdown to easily approve / change from Pending */}
-                      <select
+                      {isOwner ? <StatusBadge status={driver.status || 'Pending'} /> : <select
                         value={driver.status || 'Pending'}
                         onChange={(e) => handleStatusUpdate(driver, 'status', e.target.value)}
                         className={`text-xs font-semibold px-2.5 py-1 rounded-full border cursor-pointer outline-none ${
@@ -471,10 +467,10 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                         <option value="Approve" className="bg-slate-900 text-white">Approve</option>
                         <option value="Disapprove" className="bg-slate-900 text-white">Disapprove</option>
                         <option value="Reject" className="bg-slate-900 text-white">Reject</option>
-                      </select>
+                      </select>}
                     </Td>
                     <Td>
-                      <button
+                      {isOwner ? <StatusBadge status={driver.online_status || 'Offline'} /> : <button
                         onClick={() =>
                           handleStatusUpdate(
                             driver,
@@ -485,10 +481,10 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                         title="Click to toggle online/offline"
                       >
                         <StatusBadge status={driver.online_status || 'Offline'} />
-                      </button>
+                      </button>}
                     </Td>
                     <Td>
-                      <button
+                      {isOwner ? <StatusBadge status={driver.block_status || 'Unblock'} /> : <button
                         onClick={() =>
                           handleStatusUpdate(
                             driver,
@@ -499,7 +495,7 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                         title="Click to toggle block status"
                       >
                         <StatusBadge status={driver.block_status || 'Unblock'} />
-                      </button>
+                      </button>}
                     </Td>
                     <Td className="text-xs text-slate-500 font-mono">
                       {driver.created_at ? new Date(driver.created_at).toLocaleDateString() : '—'}
@@ -510,18 +506,17 @@ export const DriversPage: React.FC<DriversPageProps> = ({ onNotify }) => {
                           variant="ghost"
                           size="sm"
                           onClick={() => openEdit(driver)}
-                          title="Edit Driver"
                         >
                           <Edit2 size={13} className="text-slate-300" />
                         </Button>
-                        <Button
+                        {!isOwner && <Button
                           variant="danger"
                           size="sm"
                           onClick={() => setDeleteTarget(driver)}
-                          title="Delete Driver"
                         >
                           <Trash2 size={13} />
                         </Button>
+                        }
                       </div>
                     </Td>
                   </Tr>

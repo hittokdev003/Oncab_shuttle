@@ -2,6 +2,7 @@
 
 const jwt = require('jsonwebtoken');
 const { AdminUser, Role, Permission } = require('../models');
+const { normalizeRoleName, hasRole } = require('../utils/roles');
 
 const hasPermission = (userPermissions, permission) => {
   if (userPermissions.includes(permission)) return true;
@@ -67,8 +68,8 @@ const requireRole = (...roles) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
-    const userRole = req.user.role?.name;
-    if (!roles.includes(userRole)) {
+    const userRole = normalizeRoleName(req.user.role?.name);
+    if (!roles.some((role) => normalizeRoleName(role) === userRole)) {
       return res.status(403).json({
         success: false,
         message: `Access denied. Required role: ${roles.join(' or ')}`,
@@ -87,7 +88,7 @@ const requirePermission = (...permissions) => {
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
     // Admin has all permissions
-    if (req.user.role?.name === 'admin') {
+    if (hasRole(req.user, 'admin')) {
       return next();
     }
     const userPerms = req.userPermissions || [];
