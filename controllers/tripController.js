@@ -171,3 +171,115 @@ exports.assignVehicle = async (req, res, next) => {
     next(err);
   }
 };
+
+// ── Helper to check if a date matches operating_days ─────────
+const isOperatingDay = (dateObj, operatingDays) => {
+  if (!operatingDays) return true;
+  const str = String(operatingDays).toLowerCase().trim();
+  if (str === 'daily' || str === 'all' || str === '7') return true;
+
+  const dayOfWeek = dateObj.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
+  const isoDay = dayOfWeek === 0 ? 7 : dayOfWeek;
+  const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const dayName = dayNames[dayOfWeek];
+
+  if (str === 'weekdays' && isoDay >= 1 && isoDay <= 5) return true;
+  if (str === 'weekends' && (isoDay === 6 || isoDay === 7)) return true;
+
+  const tokens = str.split(/[,;\s]+/).map((s) => s.trim());
+  return tokens.includes(String(isoDay)) || tokens.includes(String(dayOfWeek)) || tokens.includes(dayName);
+};
+
+// ── Bulk Generate Future Trips Endpoint ───────────────────────
+exports.generateFutureTrips = async (req, res, next) => {
+  try {
+    const { start_date, end_date, days_ahead = 14, schedule_ids } = req.body || {};
+
+    const today = new Date();
+    const startDateObj = start_date ? new Date(start_date) : today;
+    let endDateObj = end_date ? new Date(end_date) : new Date(startDateObj.getTime() + (parseInt(days_ahead) || 14) * 24 * 60 * 60 * 1000);
+
+    const maxEndDate = new Date(startDateObj.getTime() + 60 * 24 * 60 * 60 * 1000);
+    if (endDateObj > maxEndDate) endDateObj = maxEndDate;
+
+    const scheduleWhere = {
+      status: { [Op.notIn]: ['Cancelled', 'Completed', 'Inactive'] },
+    };
+    if (Array.isArray(schedule_ids) && schedule_ids.length > 0) {
+      scheduleWhere.id = schedule_ids;
+    }
+
+    const masterSchedules = await Trip.findAll({ where: scheduleWhere });
+    if (masterSchedules.length === 0) {
+      return res.json({ success: true, message: 'No active master schedules found to generate trips', data: { created_count: 0, skipped_count: 0 } });
+    }
+
+    let createdCount = 0;
+    let skippedCount = 0;
+    const createdTrips = [];
+
+    const curr = new Date(startDateObj);
+    while (curr <= endDateObj) {
+      const dateStr = curr.toISOString().split('T')[0];
+
+      for (const master of masterSchedules) {
+        if (master.valid_from && dateStr < master.valid_from) continue;
+        if (master.valid_until && dateStr > master.valid_until) continue;
+
+        if (!isOperatingDay(curr, master.operating_days)) {
+          skippedCount++;
+          continue;
+        }
+
+        const existing = await Trip.findOne({
+          where: {
+            [Op.or]: [
+              { schedule_code: master.schedule_code, trip_date: dateStr },
+              { route_id: master.route_id, departure_time: master.departure_time, trip_date: dateStr },
+            ],
+          },
+        });
+
+        if (existing) {
+          skippedCount++;
+          continue;
+        }
+
+        const dailyTrip = await Trip.create({
+          schedule_code: master.schedule_code,
+          route_id: master.route_id,
+          bus_type_id: master.bus_type_id,
+          departure_time: master.departure_time,
+          arrival_time: master.arrival_time,
+          operating_days: master.operating_days,
+          trip_date: dateStr,
+          valid_from: master.valid_from,
+          valid_until: master.valid_until,
+          driver_id: master.driver_id,
+          vehicle_id: master.vehicle_id,
+          status: 'Scheduled',
+          notes: master.notes ? `Generated from master schedule: ${master.notes}` : `Generated trip for ${dateStr}`,
+        });
+
+        createdCount++;
+        createdTrips.push({ id: dailyTrip.id, schedule_code: dailyTrip.schedule_code, trip_date: dateStr, departure_time: dailyTrip.departure_time });
+      }
+
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    res.json({
+      success: true,
+      message: `Generated ${createdCount} future trip instances (${skippedCount} skipped/existing)`,
+      data: {
+        created_count: createdCount,
+        skipped_count: skippedCount,
+        start_date: startDateObj.toISOString().split('T')[0],
+        end_date: endDateObj.toISOString().split('T')[0],
+        trips: createdTrips.slice(0, 50),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};

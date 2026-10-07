@@ -1,11 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Download, Upload, Eye, FileSpreadsheet, X, CheckCircle2, Clock } from 'lucide-react';
+import { Plus, Edit2, Trash2, Download, Upload, Eye, FileSpreadsheet, X, CheckCircle2, Clock, Calendar, RefreshCw, Zap } from 'lucide-react';
 import { tripsAPI, routesAPI, driversAPI, vehiclesAPI } from '../services/api';
-import { Card, Table, Tr, Td, Pagination, Button, StatusBadge, ConfirmDialog, ErrorState } from '../components/ui';
+import { Card, Table, Tr, Td, Pagination, Button, StatusBadge, ConfirmDialog, ErrorState, Modal } from '../components/ui';
 
 interface ScheduledTripsPageProps {
   onNotify: (msg: string, type?: any) => void;
 }
+
+const DAYS_OF_WEEK = [
+  { id: '1', label: 'Mon', full: 'Monday' },
+  { id: '2', label: 'Tue', full: 'Tuesday' },
+  { id: '3', label: 'Wed', full: 'Wednesday' },
+  { id: '4', label: 'Thu', full: 'Thursday' },
+  { id: '5', label: 'Fri', full: 'Friday' },
+  { id: '6', label: 'Sat', full: 'Saturday' },
+  { id: '7', label: 'Sun', full: 'Sunday' },
+];
 
 export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify }) => {
   const [schedules, setSchedules] = useState<any[]>([]);
@@ -17,25 +27,38 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 15 });
 
-  // Single Trip Creation Form (Screenshot 2)
+  // Single / Recurring Master Schedule Creation Form
   const [singleForm, setSingleForm] = useState({
     route_id: '',
     driver_id: '',
     vehicle_id: '',
     bus_type_id: '',
     trip_date: '',
+    valid_from: new Date().toISOString().split('T')[0],
+    valid_until: '',
     departure_time: '',
     seat_capacity: '',
+    operating_days: ['1', '2', '3', '4', '5'], // Default: Mon-Fri
   });
   const [creatingSingle, setCreatingSingle] = useState(false);
 
-  // Bulk CSV Upload State (Screenshot 2)
+  // Future Trip Generator State
+  const [genForm, setGenForm] = useState({
+    days_ahead: 14,
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: '',
+  });
+  const [generatingFuture, setGeneratingFuture] = useState(false);
+
+  // Bulk CSV Upload State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [csvPreviewData, setCsvPreviewData] = useState<any[] | null>(null);
   const [uploadingBulk, setUploadingBulk] = useState(false);
 
   // Edit / Delete State
   const [editSchedule, setEditSchedule] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
+  const [savingEdit, setSavingEdit] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -73,7 +96,42 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
     loadDropdowns();
   }, [fetchSchedules]);
 
-  // Handle Single Trip Creation
+  // Operating Days helpers
+  const handleToggleDay = (dayId: string) => {
+    setSingleForm((prev) => {
+      const exists = prev.operating_days.includes(dayId);
+      const nextDays = exists
+        ? prev.operating_days.filter((d) => d !== dayId)
+        : [...prev.operating_days, dayId];
+      return { ...prev, operating_days: nextDays.sort() };
+    });
+  };
+
+  const handleApplyDayPreset = (preset: 'weekdays' | 'weekends' | 'daily') => {
+    if (preset === 'weekdays') {
+      setSingleForm((prev) => ({ ...prev, operating_days: ['1', '2', '3', '4', '5'] }));
+    } else if (preset === 'weekends') {
+      setSingleForm((prev) => ({ ...prev, operating_days: ['6', '7'] }));
+    } else if (preset === 'daily') {
+      setSingleForm((prev) => ({ ...prev, operating_days: ['1', '2', '3', '4', '5', '6', '7'] }));
+    }
+  };
+
+  const formatOperatingDays = (opDays: any) => {
+    if (!opDays) return 'Daily';
+    const str = String(opDays).toLowerCase().trim();
+    if (str === 'daily' || str === '1,2,3,4,5,6,7') return 'Daily (Mon-Sun)';
+    if (str === '1,2,3,4,5' || str === 'weekdays') return 'Weekdays (Mon-Fri)';
+    if (str === '6,7' || str === 'weekends') return 'Weekends (Sat-Sun)';
+
+    const tokens = str.split(/[,;\s]+/);
+    const mapped = tokens
+      .map((t) => DAYS_OF_WEEK.find((d) => d.id === t || d.label.toLowerCase() === t.toLowerCase())?.label || t)
+      .join(', ');
+    return mapped || str;
+  };
+
+  // Handle Single / Master Schedule Creation
   const handleCreateSingle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!singleForm.route_id || !singleForm.departure_time) {
@@ -94,26 +152,32 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
           : (vehicles.find((vehicle) => String(vehicle.id) === singleForm.vehicle_id)?.bus_type_id
             || vehicles.find((vehicle) => String(vehicle.id) === singleForm.vehicle_id)?.bus_type?.id
             || null),
-        trip_date: singleForm.trip_date || new Date().toISOString().split('T')[0],
+        trip_date: singleForm.trip_date || singleForm.valid_from || new Date().toISOString().split('T')[0],
+        valid_from: singleForm.valid_from || null,
+        valid_until: singleForm.valid_until || null,
+        operating_days: singleForm.operating_days.join(','),
         departure_time: singleForm.departure_time,
         seat_capacity: singleForm.seat_capacity ? parseInt(singleForm.seat_capacity) : 40,
         status: 'Scheduled',
       };
 
       await tripsAPI.create(payload);
-      onNotify('Trip created successfully');
+      onNotify('Master Schedule created successfully');
       setSingleForm({
         route_id: '',
         driver_id: '',
         vehicle_id: '',
         bus_type_id: '',
         trip_date: '',
+        valid_from: new Date().toISOString().split('T')[0],
+        valid_until: '',
         departure_time: '',
         seat_capacity: '',
+        operating_days: ['1', '2', '3', '4', '5'],
       });
       fetchSchedules();
     } catch (err: any) {
-      onNotify(err.response?.data?.message || 'Failed to create trip', 'error');
+      onNotify(err.response?.data?.message || 'Failed to create schedule', 'error');
     } finally {
       setCreatingSingle(false);
     }
@@ -126,9 +190,30 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
     }
   };
 
+  // Bulk Generate Future Trips Action
+  const handleGenerateFutureTrips = async (daysAheadNum?: number) => {
+    setGeneratingFuture(true);
+    try {
+      const payload: any = {
+        days_ahead: daysAheadNum || genForm.days_ahead || 14,
+        start_date: genForm.start_date || new Date().toISOString().split('T')[0],
+      };
+      if (genForm.end_date) payload.end_date = genForm.end_date;
+
+      const resp = await tripsAPI.generateFuture(payload);
+      const { created_count, skipped_count, message } = resp.data?.data || resp.data || {};
+      onNotify(message || `Generated ${created_count || 0} future trips (${skipped_count || 0} skipped)`);
+      fetchSchedules();
+    } catch (err: any) {
+      onNotify(err.response?.data?.message || 'Future trip generation failed', 'error');
+    } finally {
+      setGeneratingFuture(false);
+    }
+  };
+
   // Download Sample Template CSV
   const handleDownloadTemplate = () => {
-    const csvContent = 'schedule_code,route_id,driver_id,vehicle_id,trip_date,departure_time,seat_capacity\nSCH-2026-101,1,1,1,2026-09-30,06:30,40\nSCH-2026-102,2,2,2,2026-09-30,08:00,35';
+    const csvContent = 'schedule_code,route_id,driver_id,vehicle_id,operating_days,valid_from,valid_until,departure_time,seat_capacity\nSCH-2026-101,1,1,1,"1,2,3,4,5",2026-10-01,2026-12-31,06:30,40\nSCH-2026-102,2,2,2,"6,7",2026-10-01,2026-12-31,08:00,35';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -184,7 +269,6 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
 
     setUploadingBulk(true);
     try {
-      // If preview data exists, create trips sequentially
       if (csvPreviewData && csvPreviewData.length > 0) {
         for (const item of csvPreviewData) {
           try {
@@ -193,7 +277,9 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               route_id: parseInt(item.route_id || '1'),
               driver_id: item.driver_id ? parseInt(item.driver_id) : null,
               vehicle_id: item.vehicle_id ? parseInt(item.vehicle_id) : null,
-              trip_date: item.trip_date || new Date().toISOString().split('T')[0],
+              operating_days: item.operating_days || '1,2,3,4,5',
+              valid_from: item.valid_from || new Date().toISOString().split('T')[0],
+              valid_until: item.valid_until || null,
               departure_time: item.departure_time || '08:00',
               seat_capacity: item.seat_capacity ? parseInt(item.seat_capacity) : 40,
               status: 'Scheduled',
@@ -214,6 +300,44 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
     }
   };
 
+  // Edit schedule
+  const handleOpenEdit = (schedule: any) => {
+    setEditSchedule(schedule);
+    const opArr = schedule.operating_days ? String(schedule.operating_days).split(/[,;\s]+/) : ['1', '2', '3', '4', '5'];
+    setEditForm({
+      schedule_code: schedule.schedule_code,
+      route_id: String(schedule.route_id || ''),
+      driver_id: String(schedule.driver_id || ''),
+      vehicle_id: String(schedule.vehicle_id || ''),
+      departure_time: schedule.departure_time || '',
+      valid_from: schedule.valid_from || '',
+      valid_until: schedule.valid_until || '',
+      operating_days: opArr,
+      status: schedule.status || 'Scheduled',
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editSchedule) return;
+    setSavingEdit(true);
+    try {
+      await tripsAPI.update(editSchedule.id, {
+        ...editForm,
+        route_id: parseInt(editForm.route_id),
+        driver_id: editForm.driver_id ? parseInt(editForm.driver_id) : null,
+        vehicle_id: editForm.vehicle_id ? parseInt(editForm.vehicle_id) : null,
+        operating_days: Array.isArray(editForm.operating_days) ? editForm.operating_days.join(',') : editForm.operating_days,
+      });
+      onNotify('Schedule updated successfully');
+      setEditSchedule(null);
+      fetchSchedules();
+    } catch (err: any) {
+      onNotify(err.response?.data?.message || 'Update failed', 'error');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -231,15 +355,23 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
 
   return (
     <div className="space-y-5">
-      {/* ── Card 1: Create Single Trip (Screenshot 2) ── */}
+      {/* ── Card 1: Create Master & Recurring Trip Schedule ── */}
       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white">
-          Create Single Trip
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Calendar size={18} className="text-indigo-500" />
+              Create Master & Recurring Trip Schedule
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Define route timetables, driver/bus assignments, repeat operating days, and validity ranges.
+            </p>
+          </div>
+        </div>
 
         <form onSubmit={handleCreateSingle} className="space-y-4">
-          {/* Row 1: Route, Driver, Vehicle, Date, Time */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* Row 1: Route, Driver, Vehicle, Time */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             {/* ROUTE */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 tracking-wider uppercase">
@@ -258,7 +390,6 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                   </option>
                 ))}
               </select>
-              <span className="text-[10px] text-slate-400 mt-1 block">Lists routes from /api/routes</span>
             </div>
 
             {/* DRIVER */}
@@ -290,8 +421,8 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 onChange={(e) => {
                   const vehicleId = e.target.value;
                   const selectedVehicle = vehicles.find((vehicle) => String(vehicle.id) === vehicleId);
-                  setSingleForm((previous) => ({
-                    ...previous,
+                  setSingleForm((prev) => ({
+                    ...prev,
                     vehicle_id: vehicleId,
                     bus_type_id: selectedVehicle?.bus_type_id || selectedVehicle?.bus_type?.id
                       ? String(selectedVehicle.bus_type_id || selectedVehicle.bus_type.id)
@@ -309,23 +440,10 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               </select>
             </div>
 
-            {/* DATE */}
+            {/* DEPARTURE TIME */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 tracking-wider uppercase">
-                DATE
-              </label>
-              <input
-                type="date"
-                value={singleForm.trip_date}
-                onChange={(e) => setSingleForm({ ...singleForm, trip_date: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            {/* TIME + Quick Times */}
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 tracking-wider uppercase">
-                TIME <span className="text-rose-500">*</span>
+                DEPARTURE TIME <span className="text-rose-500">*</span>
               </label>
               <div className="flex items-center gap-1.5">
                 <input
@@ -353,41 +471,195 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
             </div>
           </div>
 
-          {/* Row 2: SEAT CAPACITY (OPTIONAL) */}
-          {/* <div className="max-w-xs">
-            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 tracking-wider uppercase">
-              SEAT CAPACITY (OPTIONAL)
-            </label>
-            <input
-              type="number"
-              placeholder="e.g. 40"
-              value={singleForm.seat_capacity}
-              onChange={(e) => setSingleForm({ ...singleForm, seat_capacity: e.target.value })}
-              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-mono"
-            />
-          </div> */}
+          {/* Row 2: Repeat Operating Days & Presets */}
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-750 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <RefreshCw size={14} className="text-indigo-500" />
+                REPEAT OPERATING DAYS
+              </label>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleApplyDayPreset('weekdays')}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Mon - Fri (Weekdays)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyDayPreset('weekends')}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Sat - Sun (Weekends)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyDayPreset('daily')}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Daily (7 Days)
+                </button>
+              </div>
+            </div>
 
-          {/* Create Trip Action Button */}
-          <div>
-            <button
-              type="submit"
-              disabled={creatingSingle}
-              className="px-6 py-2 bg-[#0c2e59] hover:bg-[#082040] text-white text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50"
-            >
-              {creatingSingle ? 'Creating...' : 'Create Trip'}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {DAYS_OF_WEEK.map((d) => {
+                const active = singleForm.operating_days.includes(d.id);
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => handleToggleDay(d.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      active
+                        ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-500/30'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Row 3: Validity Date Range */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 tracking-wider uppercase">
+                VALID FROM (START DATE)
+              </label>
+              <input
+                type="date"
+                value={singleForm.valid_from}
+                onChange={(e) => setSingleForm({ ...singleForm, valid_from: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 tracking-wider uppercase">
+                VALID UNTIL (END DATE)
+              </label>
+              <input
+                type="date"
+                value={singleForm.valid_until}
+                placeholder="Optional end date"
+                onChange={(e) => setSingleForm({ ...singleForm, valid_until: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={creatingSingle}
+                className="w-full px-6 py-2 bg-[#0c2e59] hover:bg-[#082040] text-white text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50"
+              >
+                {creatingSingle ? 'Creating...' : 'Create Master Schedule'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
 
-      {/* ── Card 2: Bulk Trip Creation (Screenshot 2) ── */}
+      {/* ── Card 2: Cityflo-Style Future Trip Instance Generator ── */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-5 rounded-2xl border border-indigo-800/40 text-white shadow-lg space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Zap size={18} className="text-amber-400 fill-amber-400" />
+              1-Click Future Trip Instance Generator
+            </h3>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Auto-generate daily future trips for all active schedules according to their repeat operating days & validity dates.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleGenerateFutureTrips(7)}
+              disabled={generatingFuture}
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-lg border border-white/20 transition-all disabled:opacity-50"
+            >
+              +7 Days Ahead
+            </button>
+            <button
+              type="button"
+              onClick={() => handleGenerateFutureTrips(14)}
+              disabled={generatingFuture}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50"
+            >
+              +14 Days Ahead
+            </button>
+            <button
+              type="button"
+              onClick={() => handleGenerateFutureTrips(30)}
+              disabled={generatingFuture}
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-lg border border-white/20 transition-all disabled:opacity-50"
+            >
+              +30 Days Ahead
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-white/10">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-300 mb-1 tracking-wider uppercase">
+              GENERATION START DATE
+            </label>
+            <input
+              type="date"
+              value={genForm.start_date}
+              onChange={(e) => setGenForm({ ...genForm, start_date: e.target.value })}
+              className="w-full px-3 py-2 text-xs bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-300 mb-1 tracking-wider uppercase">
+              GENERATION END DATE (OPTIONAL)
+            </label>
+            <input
+              type="date"
+              value={genForm.end_date}
+              onChange={(e) => setGenForm({ ...genForm, end_date: e.target.value })}
+              className="w-full px-3 py-2 text-xs bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => handleGenerateFutureTrips()}
+              disabled={generatingFuture}
+              className="w-full px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {generatingFuture ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  Generating Future Trips...
+                </>
+              ) : (
+                <>
+                  <Zap size={14} className="fill-slate-950" />
+                  Generate Custom Range Trips
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Card 3: Bulk CSV Import ── */}
       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
         <div>
           <h3 className="text-base font-bold text-slate-900 dark:text-white">
-            Bulk Trip Creation
+            Bulk CSV Master Schedule Upload
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Upload a CSV file to create multiple trips at once.
+            Upload CSV files to batch create recurring route schedules and daily trips.
           </p>
         </div>
 
@@ -432,7 +704,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
           </div>
         </div>
 
-        {/* CSV Preview Modal / Table */}
+        {/* CSV Preview Table */}
         {csvPreviewData && (
           <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200 dark:border-slate-700">
@@ -453,9 +725,9 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                     <th className="p-1.5">Schedule Code</th>
                     <th className="p-1.5">Route ID</th>
                     <th className="p-1.5">Driver ID</th>
-                    <th className="p-1.5">Date</th>
+                    <th className="p-1.5">Repeat Days</th>
                     <th className="p-1.5">Time</th>
-                    <th className="p-1.5">Seats</th>
+                    <th className="p-1.5">Validity</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -464,9 +736,9 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                       <td className="p-1.5 text-slate-900 dark:text-white">{row.schedule_code || '—'}</td>
                       <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.route_id || '—'}</td>
                       <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.driver_id || '—'}</td>
-                      <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.trip_date || '—'}</td>
+                      <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.operating_days || 'Mon-Fri'}</td>
                       <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.departure_time || '—'}</td>
-                      <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.seat_capacity || '40'}</td>
+                      <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.valid_from || '—'} to {row.valid_until || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -487,16 +759,15 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 'ID',
                 'SCHEDULE CODE',
                 'ROUTE',
-                'DRIVER',
-                'VEHICLE',
-                'DATE & TIME',
-                'CAPACITY',
+                'REPEAT DAYS',
+                'DRIVER & BUS',
+                'TIME & VALIDITY',
                 'STATUS',
                 'ACTIONS',
               ]}
               loading={loading}
               empty={!loading && schedules.length === 0}
-              emptyMessage="No scheduled trips found"
+              emptyMessage="No scheduled master trips found"
             >
               {schedules.map((schedule) => (
                 <Tr key={schedule.id}>
@@ -518,24 +789,34 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                       '—'
                     )}
                   </Td>
-                  <Td className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                    {schedule.driver?.name || 'Unassigned'}
+                  <Td className="text-xs">
+                    <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800">
+                      {formatOperatingDays(schedule.operating_days)}
+                    </span>
                   </Td>
-                  <Td className="text-xs font-mono font-semibold text-slate-800 dark:text-slate-200">
-                    {schedule.vehicle?.registration_number || 'Unassigned'}
+                  <Td className="text-xs">
+                    <div className="font-medium text-slate-700 dark:text-slate-300">
+                      {schedule.driver?.name || 'No Driver'}
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-500">
+                      {schedule.vehicle?.registration_number || 'No Vehicle'}
+                    </div>
                   </Td>
                   <Td className="text-xs font-mono text-slate-700 dark:text-slate-300">
-                    <div>{schedule.trip_date || 'Daily'}</div>
-                    <div className="text-slate-500 text-[11px]">{schedule.departure_time}</div>
-                  </Td>
-                  <Td className="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                    {schedule.seat_capacity || 40} Seats
+                    <div className="font-bold text-indigo-600 dark:text-indigo-400">{schedule.departure_time}</div>
+                    <div className="text-slate-500 text-[11px]">
+                      {schedule.valid_from || schedule.trip_date || 'Ongoing'}
+                      {schedule.valid_until ? ` to ${schedule.valid_until}` : ''}
+                    </div>
                   </Td>
                   <Td>
                     <StatusBadge status={schedule.status || 'Scheduled'} />
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1.5">
+                      <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(schedule)}>
+                        <Edit2 size={13} />
+                      </Button>
                       <Button variant="danger" size="sm" onClick={() => setDeleteTarget(schedule)}>
                         <Trash2 size={13} />
                       </Button>
@@ -555,6 +836,95 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
           </>
         )}
       </Card>
+
+      {/* Edit Schedule Modal */}
+      {editSchedule && (
+        <Modal
+          open={!!editSchedule}
+          onClose={() => setEditSchedule(null)}
+          title={`Edit Master Schedule: ${editSchedule.schedule_code}`}
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">ROUTE</label>
+                <select
+                  value={editForm.route_id}
+                  onChange={(e) => setEditForm({ ...editForm, route_id: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                >
+                  {routes.map((r) => (
+                    <option key={r.id} value={r.id}>{r.route_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">DEPARTURE TIME</label>
+                <input
+                  type="time"
+                  value={editForm.departure_time}
+                  onChange={(e) => setEditForm({ ...editForm, departure_time: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">DRIVER</label>
+                <select
+                  value={editForm.driver_id}
+                  onChange={(e) => setEditForm({ ...editForm, driver_id: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                >
+                  <option value="">Unassigned</option>
+                  {drivers.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">VEHICLE</label>
+                <select
+                  value={editForm.vehicle_id}
+                  onChange={(e) => setEditForm({ ...editForm, vehicle_id: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                >
+                  <option value="">Unassigned</option>
+                  {vehicles.map((v) => (
+                    <option key={v.id} value={v.id}>{v.registration_number}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">VALID FROM</label>
+                <input
+                  type="date"
+                  value={editForm.valid_from}
+                  onChange={(e) => setEditForm({ ...editForm, valid_from: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">VALID UNTIL</label>
+                <input
+                  type="date"
+                  value={editForm.valid_until}
+                  onChange={(e) => setEditForm({ ...editForm, valid_until: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3">
+              <Button variant="ghost" onClick={() => setEditSchedule(null)}>Cancel</Button>
+              <Button variant="primary" loading={savingEdit} onClick={handleSaveEdit}>Save Changes</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Delete Confirmation */}
       <ConfirmDialog
