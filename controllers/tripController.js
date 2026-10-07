@@ -27,14 +27,36 @@ const TRIP_DETAILS_INCLUDE = [
   ...TRIP_INCLUDE.filter((include) => include.as !== 'route'),
 ];
 
+// ── Helper to normalize date string to YYYY-MM-DD ──────────
+const normalizeDateStr = (dateStr) => {
+  if (!dateStr || typeof dateStr !== 'string') return dateStr;
+  const str = dateStr.trim();
+  const parts = str.split(/[-/]/).map(Number);
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    let y, m, d;
+    if (parts[0] >= 1000) {
+      // YYYY-MM-DD format
+      y = parts[0]; m = parts[1]; d = parts[2];
+    } else if (parts[2] >= 1000) {
+      // DD-MM-YYYY format
+      y = parts[2]; m = parts[1]; d = parts[0];
+    }
+    if (y && m && d) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+  return str;
+};
+
 // ── Helper to parse date string into local Date object ───────
 const parseLocalDate = (dateStr) => {
-  if (!dateStr || typeof dateStr !== 'string') return new Date();
-  const parts = dateStr.split('-').map(Number);
+  const norm = normalizeDateStr(dateStr);
+  if (!norm || typeof norm !== 'string') return new Date();
+  const parts = norm.split('-').map(Number);
   if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
     return new Date(parts[0], parts[1] - 1, parts[2]);
   }
-  return new Date(dateStr);
+  return new Date(norm);
 };
 
 // ── Helper to check if a date matches operating_days ─────────
@@ -58,8 +80,10 @@ const isOperatingDay = (dateObj, operatingDays) => {
 // ── Helper to ensure trip instances exist for a date range ────
 const ensureTripInstancesForRange = async (startStr, endStr) => {
   try {
-    const startDateObj = parseLocalDate(startStr);
-    const endDateObj = parseLocalDate(endStr || startStr);
+    const normStart = normalizeDateStr(startStr);
+    const normEnd = normalizeDateStr(endStr || startStr);
+    const startDateObj = parseLocalDate(normStart);
+    const endDateObj = parseLocalDate(normEnd);
     if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) return;
 
     // Limit maximum auto-generation window per request to 60 days
@@ -125,7 +149,11 @@ const ensureTripInstancesForRange = async (startStr, endStr) => {
 // ── List Trips ─────────────────────────────────────────────
 exports.list = async (req, res, next) => {
   try {
-    const { page, limit, search, status, route_id, trip_date, from_date, to_date } = req.query;
+    let { page, limit, search, status, route_id, driver_id, trip_date, from_date, to_date } = req.query;
+
+    if (trip_date) trip_date = normalizeDateStr(trip_date);
+    if (from_date) from_date = normalizeDateStr(from_date);
+    if (to_date) to_date = normalizeDateStr(to_date);
 
     const targetFrom = from_date || trip_date || new Date().toISOString().split('T')[0];
     const targetTo = to_date || trip_date || targetFrom;
@@ -136,9 +164,16 @@ exports.list = async (req, res, next) => {
 
     const { offset, limit: lim, page: p } = buildPagination(page, limit);
     const where = {};
-    if (search) where.schedule_code = { [Op.like]: `%${search}%` };
+    if (search) {
+      where[Op.or] = [
+        { schedule_code: { [Op.like]: `%${search}%` } },
+        { '$route.route_name$': { [Op.like]: `%${search}%` } },
+        { '$driver.name$': { [Op.like]: `%${search}%` } },
+      ];
+    }
     if (status) where.status = status;
     if (route_id) where.route_id = route_id;
+    if (driver_id) where.driver_id = driver_id;
     if (trip_date) where.trip_date = trip_date;
     if (from_date && to_date) where.trip_date = { [Op.between]: [from_date, to_date] };
     if (from_date && !to_date) where.trip_date = { [Op.gte]: from_date };
