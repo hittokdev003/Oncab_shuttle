@@ -1,7 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Eye, Search, AlertTriangle, CheckCircle, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, Edit2, Trash2, MapPin, Eye, Search, AlertTriangle, CheckCircle, X, Navigation, Loader2, Compass, Map as MapIcon } from 'lucide-react';
 import { stopsAPI } from '../services/api';
 import { Card, Table, Tr, Td, Pagination, SearchInput, Button, Select, StatusBadge, Modal, ConfirmDialog, ErrorState, Badge } from '../components/ui';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+
+// Fix for default marker icon in Leaflet with React
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 interface PhysicalStop {
   id: number;
@@ -21,6 +31,28 @@ interface StopsPageProps {
   onNotify: (msg: string, type?: any) => void;
 }
 
+// ── Map Click & Center Handler Component ─────────────────────
+const MapClickHandler: React.FC<{
+  onMapClick: (lat: number, lng: number) => void;
+  center?: [number, number];
+}> = ({ onMapClick, center }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (center && center[0] && center[1] && !isNaN(center[0]) && !isNaN(center[1])) {
+      map.setView(center, Math.max(map.getZoom(), 15), { animate: true });
+    }
+  }, [map, center]);
+
+  useMapEvents({
+    click(e) {
+      onMapClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+
+  return null;
+};
+
 export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
   const [stops, setStops] = useState<PhysicalStop[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,18 +69,22 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
 
   const [nearbyWarning, setNearbyWarning] = useState<any[]>([]);
 
   const [form, setForm] = useState({
     stop_name: '',
     stop_code: '',
-    latitude: '',
-    longitude: '',
+    latitude: '22.4824724',
+    longitude: '88.3508133',
     address: '',
     landmark: '',
     status: 'Active',
   });
+
+  const [mapCenter, setMapCenter] = useState<[number, number]>([22.4824724, 88.3508133]);
 
   const fetchStops = useCallback(async () => {
     try {
@@ -91,32 +127,149 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
     }
   };
 
+  // Reverse Geocode: Lat/Lng -> Address
+  const reverseGeocode = async (lat: number, lng: number) => {
+    setGeocoding(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.display_name) {
+          setForm((prev) => ({
+            ...prev,
+            address: data.display_name,
+          }));
+        }
+      }
+    } catch {
+      // Ignore network / rate limit errors
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  // Forward Geocode: Name / Query -> Lat/Lng & Address
+  const handleSearchMapLocation = async (queryText?: string) => {
+    const query = queryText || mapSearchQuery || form.stop_name;
+    if (!query || !query.trim()) {
+      onNotify('Please enter a location or stop name to search', 'error');
+      return;
+    }
+
+    setGeocoding(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lng = parseFloat(data[0].lon);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            const latFixed = lat.toFixed(7);
+            const lngFixed = lng.toFixed(7);
+            setForm((prev) => ({
+              ...prev,
+              latitude: latFixed,
+              longitude: lngFixed,
+              address: data[0].display_name || prev.address,
+            }));
+            setMapCenter([lat, lng]);
+            checkNearby(latFixed, lngFixed);
+            onNotify('Location found & map centered');
+            return;
+          }
+        }
+        onNotify('Location not found on map, please try a different query or click the map', 'error');
+      }
+    } catch {
+      onNotify('Geocoding service unavailable', 'error');
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  // Map Click Event Handler
+  const handleMapClick = (lat: number, lng: number) => {
+    const latFixed = lat.toFixed(7);
+    const lngFixed = lng.toFixed(7);
+    setForm((prev) => ({
+      ...prev,
+      latitude: latFixed,
+      longitude: lngFixed,
+    }));
+    setMapCenter([lat, lng]);
+    checkNearby(latFixed, lngFixed);
+    reverseGeocode(lat, lng);
+  };
+
+  // Marker Drag Handler
+  const handleMarkerDragEnd = (e: any) => {
+    const latlng = e.target.getLatLng();
+    if (latlng) {
+      handleMapClick(latlng.lat, latlng.lng);
+    }
+  };
+
+  // Device GPS Location Handler
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      onNotify('Geolocation is not supported by your browser', 'error');
+      return;
+    }
+    setGeocoding(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        handleMapClick(lat, lng);
+        setGeocoding(false);
+        onNotify('Centered map to your current GPS position');
+      },
+      () => {
+        setGeocoding(false);
+        onNotify('Unable to retrieve your current location', 'error');
+      }
+    );
+  };
+
   const openCreate = () => {
     setEditStop(null);
+    const defaultLat = '22.4824724';
+    const defaultLng = '88.3508133';
     setForm({
       stop_name: '',
       stop_code: '',
-      latitude: '',
-      longitude: '',
+      latitude: defaultLat,
+      longitude: defaultLng,
       address: '',
       landmark: '',
       status: 'Active',
     });
+    setMapCenter([parseFloat(defaultLat), parseFloat(defaultLng)]);
+    setMapSearchQuery('');
     setNearbyWarning([]);
     setShowCreateModal(true);
   };
 
   const openEdit = (s: PhysicalStop) => {
     setEditStop(s);
+    const latStr = s.latitude != null ? String(s.latitude) : '22.4824724';
+    const lngStr = s.longitude != null ? String(s.longitude) : '88.3508133';
     setForm({
       stop_name: s.stop_name || '',
       stop_code: s.stop_code || '',
-      latitude: s.latitude != null ? String(s.latitude) : '',
-      longitude: s.longitude != null ? String(s.longitude) : '',
+      latitude: latStr,
+      longitude: lngStr,
       address: s.address || '',
       landmark: s.landmark || '',
       status: s.status || 'Active',
     });
+    const latNum = parseFloat(latStr);
+    const lngNum = parseFloat(lngStr);
+    if (!isNaN(latNum) && !isNaN(lngNum)) {
+      setMapCenter([latNum, lngNum]);
+    }
+    setMapSearchQuery('');
     setNearbyWarning([]);
     setShowCreateModal(true);
   };
@@ -326,121 +479,287 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
         </div>
       )}
 
-      {/* Create / Edit Stop Modal */}
+      {/* ── Big Create / Edit Stop Modal with Interactive Leaflet Map ── */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
-          <div className="relative w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-6 my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-semibold text-white">
-                {editStop ? 'Edit Physical Stop' : 'Create New Physical Stop'}
-              </h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-white">
-                <X size={18} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                  <MapPin size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    {editStop ? 'Edit Physical Stop' : 'Create New Physical Stop'}
+                    <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Compass size={12} /> Interactive Map Active
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Click anywhere on the map to pin exact coordinates & auto-select address details.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-3.5 pt-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Stop Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. RANIKUTHI- MADHUMITA RESTAURANT"
-                  value={form.stop_name}
-                  onChange={(e) => setForm({ ...form, stop_name: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Stop Code</label>
-                <input
-                  type="text"
-                  placeholder="e.g. RNK-001"
-                  value={form.stop_code}
-                  onChange={(e) => setForm({ ...form, stop_code: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Latitude</label>
-                  <input
-                    type="text"
-                    placeholder="22.4824724"
-                    value={form.latitude}
-                    onChange={(e) => {
-                      setForm({ ...form, latitude: e.target.value });
-                      checkNearby(e.target.value, form.longitude);
-                    }}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Longitude</label>
-                  <input
-                    type="text"
-                    placeholder="88.3508133"
-                    value={form.longitude}
-                    onChange={(e) => {
-                      setForm({ ...form, longitude: e.target.value });
-                      checkNearby(form.latitude, e.target.value);
-                    }}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Nearby Proximity Warning */}
-              {nearbyWarning.length > 0 && (
-                <div className="p-3 bg-amber-950/50 border border-amber-800/60 rounded-lg text-xs text-amber-300 space-y-1">
-                  <div className="flex items-center gap-1.5 font-semibold">
-                    <AlertTriangle size={14} className="text-amber-400 shrink-0" />
-                    An existing stop is nearby!
-                  </div>
-                  {nearbyWarning.slice(0, 2).map((item) => (
-                    <div key={item.id} className="text-[11px] text-amber-200/90 pl-5">
-                      • {item.stop_name} ({item.distance_meters}m away)
+            {/* Modal Body - 2 Columns (Form Left, Map Right) */}
+            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* ── Left Column: Form Controls (5 cols) ── */}
+                <div className="lg:col-span-5 space-y-4">
+                  {/* Stop Name */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-200">
+                        Stop Name <span className="text-rose-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleSearchMapLocation(form.stop_name)}
+                        disabled={geocoding || !form.stop_name}
+                        className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 disabled:opacity-50"
+                      >
+                        {geocoding ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                        Find on Map
+                      </button>
                     </div>
-                  ))}
-                  <div className="text-[10px] text-amber-400/80 pt-1">
-                    Please verify if you want to reuse an existing stop instead of creating a duplicate.
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. RANIKUTHI- MADHUMITA RESTAURANT"
+                      value={form.stop_name}
+                      onChange={(e) => setForm({ ...form, stop_name: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
+                    />
+                  </div>
+
+                  {/* Stop Code */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-200 mb-1">Stop Code</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. RNK-001"
+                      value={form.stop_code}
+                      onChange={(e) => setForm({ ...form, stop_code: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                  </div>
+
+                  {/* Latitude & Longitude */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-200 mb-1">Latitude</label>
+                      <input
+                        type="text"
+                        placeholder="22.4824724"
+                        value={form.latitude}
+                        onChange={(e) => {
+                          const latVal = e.target.value;
+                          setForm({ ...form, latitude: latVal });
+                          const latNum = parseFloat(latVal);
+                          const lngNum = parseFloat(form.longitude);
+                          if (!isNaN(latNum) && !isNaN(lngNum)) {
+                            setMapCenter([latNum, lngNum]);
+                            checkNearby(latVal, form.longitude);
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-200 mb-1">Longitude</label>
+                      <input
+                        type="text"
+                        placeholder="88.3508133"
+                        value={form.longitude}
+                        onChange={(e) => {
+                          const lngVal = e.target.value;
+                          setForm({ ...form, longitude: lngVal });
+                          const latNum = parseFloat(form.latitude);
+                          const lngNum = parseFloat(lngVal);
+                          if (!isNaN(latNum) && !isNaN(lngNum)) {
+                            setMapCenter([latNum, lngNum]);
+                            checkNearby(form.latitude, lngVal);
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Address */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-200">Address</label>
+                      {geocoding && (
+                        <span className="text-[10px] text-amber-400 flex items-center gap-1 font-semibold">
+                          <Loader2 size={10} className="animate-spin" /> Auto-fetching address...
+                        </span>
+                      )}
+                    </div>
+                    <textarea
+                      rows={2}
+                      placeholder="Street address or junction detail"
+                      value={form.address}
+                      onChange={(e) => setForm({ ...form, address: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Landmark */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-200 mb-1">Landmark</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Near Reliance Digital"
+                      value={form.landmark}
+                      onChange={(e) => setForm({ ...form, landmark: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  {/* Status */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-200 mb-1">Status</label>
+                    <select
+                      value={form.status}
+                      onChange={(e) => setForm({ ...form, status: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 font-medium"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+
+                  {/* Nearby Proximity Warning */}
+                  {nearbyWarning.length > 0 && (
+                    <div className="p-3 bg-amber-950/60 border border-amber-800/80 rounded-xl text-xs text-amber-300 space-y-1 shadow-sm">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                        Existing Physical Stop Nearby!
+                      </div>
+                      {nearbyWarning.slice(0, 3).map((item) => (
+                        <div key={item.id} className="text-[11px] text-amber-200/90 pl-5">
+                          • <span className="font-semibold text-white">{item.stop_name}</span> ({item.distance_meters}m away)
+                        </div>
+                      ))}
+                      <div className="text-[10px] text-amber-400/80 pt-1">
+                        Please verify to avoid creating duplicate physical stops.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Form Action Buttons */}
+                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                    <Button variant="ghost" type="button" onClick={() => setShowCreateModal(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" loading={saving} icon={MapPin}>
+                      {editStop ? 'Save Changes' : 'Create Physical Stop'}
+                    </Button>
                   </div>
                 </div>
-              )}
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Address</label>
-                <input
-                  type="text"
-                  placeholder="Street address or junction detail"
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+                {/* ── Right Column: Large Interactive Leaflet Map (7 cols) ── */}
+                <div className="lg:col-span-7 flex flex-col space-y-3">
+                  {/* Map Search Bar & GPS Controls */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search location or landmark (e.g. Ranikuthi, Jadavpur)..."
+                        value={mapSearchQuery}
+                        onChange={(e) => setMapSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSearchMapLocation();
+                          }
+                        }}
+                        className="w-full pl-8 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSearchMapLocation()}
+                      disabled={geocoding}
+                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                    >
+                      {geocoding ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                      Search
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleUseCurrentLocation}
+                      disabled={geocoding}
+                      className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-lg transition-colors shrink-0"
+                      title="Use My Current GPS Position"
+                    >
+                      <Navigation size={16} />
+                    </button>
+                  </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Landmark</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Near Reliance Digital"
-                  value={form.landmark}
-                  onChange={(e) => setForm({ ...form, landmark: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+                  {/* Leaflet Map Box */}
+                  <div className="relative flex-1 min-h-[380px] rounded-xl overflow-hidden border border-slate-700/80 shadow-inner">
+                    <MapContainer
+                      center={mapCenter}
+                      zoom={15}
+                      style={{ height: '100%', width: '100%', minHeight: '380px' }}
+                    >
+                      <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      />
+                      
+                      <Marker
+                        position={mapCenter}
+                        draggable={true}
+                        eventHandlers={{ dragend: handleMarkerDragEnd }}
+                      >
+                        <Popup>
+                          <div className="text-xs">
+                            <strong className="text-indigo-900 block">{form.stop_name || 'Selected Stop Location'}</strong>
+                            <span className="font-mono text-slate-600">{form.latitude}, {form.longitude}</span>
+                          </div>
+                        </Popup>
+                      </Marker>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-                <Button variant="ghost" type="button" onClick={() => setShowCreateModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" loading={saving}>
-                  Save Physical Stop
-                </Button>
+                      <MapClickHandler onMapClick={handleMapClick} center={mapCenter} />
+                    </MapContainer>
+
+                    {/* Geocoding Loading Indicator Overlay */}
+                    {geocoding && (
+                      <div className="absolute top-3 right-3 z-[1000] bg-slate-900/90 border border-indigo-500/50 text-indigo-300 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-lg backdrop-blur-sm">
+                        <Loader2 size={14} className="animate-spin text-indigo-400" />
+                        Fetching location details...
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Map Hint Footer */}
+                  <div className="p-3 bg-slate-800/80 border border-slate-700/60 rounded-xl text-xs text-slate-300 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 truncate">
+                      <MapIcon size={15} className="text-indigo-400 shrink-0" />
+                      <span className="truncate">
+                        <strong>Click map or drag pin</strong> to set location. Latitude, Longitude & Address auto-select.
+                      </span>
+                    </div>
+                    <span className="font-mono text-[11px] text-indigo-300 bg-indigo-950/80 border border-indigo-800/50 px-2 py-0.5 rounded shrink-0">
+                      {form.latitude}, {form.longitude}
+                    </span>
+                  </div>
+                </div>
+
               </div>
             </form>
           </div>
