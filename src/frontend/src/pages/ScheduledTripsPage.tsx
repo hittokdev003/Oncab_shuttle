@@ -360,7 +360,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Calendar size={18} className="text-indigo-500" />
+              <Calendar size={18} className="text-indigo-600 dark:text-indigo-400" />
               Create Master & Recurring Trip Schedule
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -381,7 +381,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 required
                 value={singleForm.route_id}
                 onChange={(e) => setSingleForm({ ...singleForm, route_id: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-medium"
               >
                 <option value="">Select a route</option>
                 {routes.map((r) => (
@@ -400,7 +400,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               <select
                 value={singleForm.driver_id}
                 onChange={(e) => setSingleForm({ ...singleForm, driver_id: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-medium"
               >
                 <option value="">Select a driver</option>
                 {drivers.map((d) => (
@@ -429,7 +429,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                       : '',
                   }));
                 }}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-medium"
               >
                 <option value="">Select a vehicle</option>
                 {vehicles.map((v) => (
@@ -451,11 +451,11 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                   required
                   value={singleForm.departure_time}
                   onChange={(e) => setSingleForm({ ...singleForm, departure_time: e.target.value })}
-                  className="w-1/2 px-2.5 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  className="w-1/2 px-2.5 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-medium"
                 />
                 <select
                   onChange={(e) => handleQuickTimeChange(e.target.value)}
-                  className="w-1/2 px-2 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  className="w-1/2 px-2 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-medium"
                   defaultValue=""
                 >
                   <option value="" disabled>Quick Times</option>
@@ -472,31 +472,31 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
           </div>
 
           {/* Row 2: Repeat Operating Days & Presets */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-750 space-y-2.5">
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <RefreshCw size={14} className="text-indigo-500" />
+                <RefreshCw size={14} className="text-indigo-600 dark:text-indigo-400" />
                 REPEAT OPERATING DAYS
               </label>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => handleApplyDayPreset('weekdays')}
-                  className="px-2.5 py-1 text-[11px] font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 transition-colors"
+                  className="px-2.5 py-1 text-[11px] font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-200 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-slate-700 transition-colors shadow-xs"
                 >
                   Mon - Fri (Weekdays)
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyDayPreset('weekends')}
-                  className="px-2.5 py-1 text-[11px] font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 transition-colors"
+                  className="px-2.5 py-1 text-[11px] font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-200 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-slate-700 transition-colors shadow-xs"
                 >
                   Sat - Sun (Weekends)
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyDayPreset('daily')}
-                  className="px-2.5 py-1 text-[11px] font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 transition-colors"
+                  className="px-2.5 py-1 text-[11px] font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-200 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-slate-700 transition-colors shadow-xs"
                 >
                   Daily (7 Days)
                 </button>
@@ -514,7 +514,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       active
                         ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-500/30'
-                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                     }`}
                   >
                     {d.label}
@@ -534,7 +534,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 type="date"
                 value={singleForm.valid_from}
                 onChange={(e) => setSingleForm({ ...singleForm, valid_from: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-medium"
               />
             </div>
 
@@ -547,7 +547,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 value={singleForm.valid_until}
                 placeholder="Optional end date"
                 onChange={(e) => setSingleForm({ ...singleForm, valid_until: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-medium"
               />
             </div>
 
@@ -555,7 +555,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               <button
                 type="submit"
                 disabled={creatingSingle}
-                className="w-full px-6 py-2 bg-[#0c2e59] hover:bg-[#082040] text-white text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50"
+                className="w-full px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-sm transition-all disabled:opacity-50"
               >
                 {creatingSingle ? 'Creating...' : 'Create Master Schedule'}
               </button>
@@ -565,7 +565,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
       </div>
 
       {/* ── Card 2: Cityflo-Style Future Trip Instance Generator ── */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-5 rounded-2xl border border-indigo-800/40 text-white shadow-lg space-y-4">
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 dark:from-slate-950 dark:via-indigo-950 dark:to-slate-950 p-5 rounded-2xl border border-indigo-800/40 text-white shadow-lg space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -581,7 +581,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               type="button"
               onClick={() => handleGenerateFutureTrips(7)}
               disabled={generatingFuture}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-lg border border-white/20 transition-all disabled:opacity-50"
+              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/20 transition-all disabled:opacity-50"
             >
               +7 Days Ahead
             </button>
@@ -589,7 +589,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               type="button"
               onClick={() => handleGenerateFutureTrips(14)}
               disabled={generatingFuture}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50"
             >
               +14 Days Ahead
             </button>
@@ -597,7 +597,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               type="button"
               onClick={() => handleGenerateFutureTrips(30)}
               disabled={generatingFuture}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-lg border border-white/20 transition-all disabled:opacity-50"
+              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/20 transition-all disabled:opacity-50"
             >
               +30 Days Ahead
             </button>
@@ -606,26 +606,26 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-white/10">
           <div>
-            <label className="block text-[11px] font-bold text-slate-300 mb-1 tracking-wider uppercase">
+            <label className="block text-[11px] font-bold text-slate-200 mb-1 tracking-wider uppercase">
               GENERATION START DATE
             </label>
             <input
               type="date"
               value={genForm.start_date}
               onChange={(e) => setGenForm({ ...genForm, start_date: e.target.value })}
-              className="w-full px-3 py-2 text-xs bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-amber-400"
+              className="w-full px-3 py-2 text-xs bg-slate-800 text-white border border-slate-600 rounded-lg focus:outline-none focus:border-amber-400 font-medium [color-scheme:dark]"
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-300 mb-1 tracking-wider uppercase">
+            <label className="block text-[11px] font-bold text-slate-200 mb-1 tracking-wider uppercase">
               GENERATION END DATE (OPTIONAL)
             </label>
             <input
               type="date"
               value={genForm.end_date}
               onChange={(e) => setGenForm({ ...genForm, end_date: e.target.value })}
-              className="w-full px-3 py-2 text-xs bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-amber-400"
+              className="w-full px-3 py-2 text-xs bg-slate-800 text-white border border-slate-600 rounded-lg focus:outline-none focus:border-amber-400 font-medium [color-scheme:dark]"
             />
           </div>
 
@@ -634,16 +634,16 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               type="button"
               onClick={() => handleGenerateFutureTrips()}
               disabled={generatingFuture}
-              className="w-full px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {generatingFuture ? (
                 <>
-                  <RefreshCw size={14} className="animate-spin" />
+                  <RefreshCw size={14} className="animate-spin text-slate-950" />
                   Generating Future Trips...
                 </>
               ) : (
                 <>
-                  <Zap size={14} className="fill-slate-950" />
+                  <Zap size={14} className="fill-slate-950 text-slate-950" />
                   Generate Custom Range Trips
                 </>
               )}
@@ -680,7 +680,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
             <button
               type="button"
               onClick={handleDownloadTemplate}
-              className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors"
+              className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-50 transition-colors shadow-xs"
             >
               Download Template
             </button>
@@ -688,7 +688,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
             <button
               type="button"
               onClick={handlePreviewCSV}
-              className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors"
+              className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-50 transition-colors shadow-xs"
             >
               Preview CSV
             </button>
@@ -697,7 +697,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
               type="button"
               onClick={handleUploadBulk}
               disabled={uploadingBulk || !selectedFile}
-              className="px-5 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              className="px-5 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50 shadow-xs"
             >
               {uploadingBulk ? 'Uploading...' : 'Upload'}
             </button>
@@ -733,12 +733,12 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 <tbody>
                   {csvPreviewData.map((row, idx) => (
                     <tr key={idx} className="border-b border-slate-100 dark:border-slate-800 font-mono">
-                      <td className="p-1.5 text-slate-900 dark:text-white">{row.schedule_code || '—'}</td>
-                      <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.route_id || '—'}</td>
-                      <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.driver_id || '—'}</td>
-                      <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.operating_days || 'Mon-Fri'}</td>
-                      <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.departure_time || '—'}</td>
-                      <td className="p-1.5 text-slate-600 dark:text-slate-400">{row.valid_from || '—'} to {row.valid_until || '—'}</td>
+                      <td className="p-1.5 text-slate-900 dark:text-white font-bold">{row.schedule_code || '—'}</td>
+                      <td className="p-1.5 text-slate-700 dark:text-slate-300">{row.route_id || '—'}</td>
+                      <td className="p-1.5 text-slate-700 dark:text-slate-300">{row.driver_id || '—'}</td>
+                      <td className="p-1.5 text-slate-700 dark:text-slate-300">{row.operating_days || 'Mon-Fri'}</td>
+                      <td className="p-1.5 text-slate-700 dark:text-slate-300">{row.departure_time || '—'}</td>
+                      <td className="p-1.5 text-slate-700 dark:text-slate-300">{row.valid_from || '—'} to {row.valid_until || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -771,17 +771,17 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
             >
               {schedules.map((schedule) => (
                 <Tr key={schedule.id}>
-                  <Td className="font-mono text-xs text-slate-400">{schedule.id}</Td>
+                  <Td className="font-mono text-xs text-slate-500 dark:text-slate-400 font-bold">{schedule.id}</Td>
                   <Td className="font-mono text-xs font-bold text-slate-900 dark:text-white">
                     {schedule.schedule_code}
                   </Td>
                   <Td className="text-xs">
                     {schedule.route ? (
                       <div>
-                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                        <div className="font-bold text-slate-900 dark:text-slate-100">
                           {schedule.route.route_name}
                         </div>
-                        <div className="text-[11px] text-slate-500">
+                        <div className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
                           {schedule.route.origin_city} → {schedule.route.destination_city}
                         </div>
                       </div>
@@ -790,21 +790,21 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                     )}
                   </Td>
                   <Td className="text-xs">
-                    <span className="inline-block px-2 py-0.5 text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800">
+                    <span className="inline-block px-2.5 py-1 text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-900 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800">
                       {formatOperatingDays(schedule.operating_days)}
                     </span>
                   </Td>
                   <Td className="text-xs">
-                    <div className="font-medium text-slate-700 dark:text-slate-300">
+                    <div className="font-bold text-slate-900 dark:text-slate-100">
                       {schedule.driver?.name || 'No Driver'}
                     </div>
-                    <div className="text-[11px] font-mono text-slate-500">
+                    <div className="text-[11px] font-mono font-semibold text-slate-600 dark:text-slate-400">
                       {schedule.vehicle?.registration_number || 'No Vehicle'}
                     </div>
                   </Td>
-                  <Td className="text-xs font-mono text-slate-700 dark:text-slate-300">
-                    <div className="font-bold text-indigo-600 dark:text-indigo-400">{schedule.departure_time}</div>
-                    <div className="text-slate-500 text-[11px]">
+                  <Td className="text-xs font-mono">
+                    <div className="font-bold text-indigo-700 dark:text-indigo-400">{schedule.departure_time}</div>
+                    <div className="text-slate-600 dark:text-slate-400 text-[11px] font-medium">
                       {schedule.valid_from || schedule.trip_date || 'Ongoing'}
                       {schedule.valid_until ? ` to ${schedule.valid_until}` : ''}
                     </div>
@@ -851,7 +851,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 <select
                   value={editForm.route_id}
                   onChange={(e) => setEditForm({ ...editForm, route_id: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
                 >
                   {routes.map((r) => (
                     <option key={r.id} value={r.id}>{r.route_name}</option>
@@ -865,7 +865,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                   type="time"
                   value={editForm.departure_time}
                   onChange={(e) => setEditForm({ ...editForm, departure_time: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
                 />
               </div>
 
@@ -874,7 +874,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 <select
                   value={editForm.driver_id}
                   onChange={(e) => setEditForm({ ...editForm, driver_id: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
                 >
                   <option value="">Unassigned</option>
                   {drivers.map((d) => (
@@ -888,7 +888,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                 <select
                   value={editForm.vehicle_id}
                   onChange={(e) => setEditForm({ ...editForm, vehicle_id: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
                 >
                   <option value="">Unassigned</option>
                   {vehicles.map((v) => (
@@ -903,7 +903,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                   type="date"
                   value={editForm.valid_from}
                   onChange={(e) => setEditForm({ ...editForm, valid_from: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
                 />
               </div>
 
@@ -913,7 +913,7 @@ export const ScheduledTripsPage: React.FC<ScheduledTripsPageProps> = ({ onNotify
                   type="date"
                   value={editForm.valid_until}
                   onChange={(e) => setEditForm({ ...editForm, valid_until: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
                 />
               </div>
             </div>
