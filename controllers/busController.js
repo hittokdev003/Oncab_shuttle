@@ -1,7 +1,6 @@
 'use strict';
 
 const { Op, fn, col } = require('sequelize');
-const { v4: uuidv4 } = require('uuid');
 const { BusType, BusRoute, BusSchedule, BusStop, Trip, Booking, Vehicle, Stop, Route, RouteStop, BusDriverAssignment, CustomerUser, Coupon, CouponUsage, RateChart, Driver, DriverDetail, Payment, WalletTransaction } = require('../models');
 const sequelize = require('../config/database');
 const { resolveFare } = require('../utils/fareCalculator');
@@ -9,6 +8,7 @@ const { calculateCouponDiscount } = require('../utils/coupon');
 const BusStopSearchService = require('../services/busStopSearchService');
 const BusRouteSearchService = require('../services/busRouteSearchService');
 const SeatReservationService = require('../services/seatReservationService');
+const { confirmPaidBooking } = require('../services/bookingConfirmationService');
 
 const buildPagination = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -771,7 +771,8 @@ exports.checkSeatAvailability = async (req, res, next) => {
       where: {
         trip_id: validTripIds,
         travel_date,
-        booking_status: { [Op.notIn]: ['cancelled', 'Cancelled', 'CANCELLED'] },
+        booking_status: 'confirmed',
+        payment_status: { [Op.in]: ['paid', 'partial_refund', 'refunded'] },
         status: { [Op.notIn]: ['Cancelled', 'cancelled', 'CANCELLED', 'Payment Failed'] },
       },
       attributes: ['seat_numbers', 'total_seats'],
@@ -1198,6 +1199,7 @@ exports.cancelUserBooking = async (req, res, next) => {
       });
     }
 
+    const wasSeatAllocated = booking.booking_status === 'confirmed' && booking.payment_status === 'paid';
     await booking.update(
       {
         booking_status: 'cancelled',
@@ -1210,7 +1212,7 @@ exports.cancelUserBooking = async (req, res, next) => {
 
     // Decrement booked seats in trip
     const trip = await Trip.findByPk(booking.trip_id, { transaction: t });
-    if (trip) {
+    if (trip && wasSeatAllocated) {
       await trip.decrement('booked_seats', { by: booking.total_seats, transaction: t });
     }
 
@@ -1430,9 +1432,6 @@ exports.createBooking = async (req, res, next) => {
     }
 
     const booking_reference = `BK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const boarding_pass_code = `BP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    const boarding_pin = Math.floor(1000 + Math.random() * 9000).toString();
-
     const booking = await Booking.create({
       booking_reference,
       trip_id: trip.id,
@@ -1451,11 +1450,11 @@ exports.createBooking = async (req, res, next) => {
       payment_method: walletPaymentRequested ? 'wallet' : (payment_method || 'cash'),
       coupon_id: appliedCoupon?.id || null,
       special_requests: special_requests || null,
-      boarding_pass_code,
-      boarding_pin,
-      booking_status: 'confirmed',
+      boarding_pass_code: null,
+      boarding_pin: null,
+      booking_status: 'pending',
       payment_status: (walletPaymentRequested || final_amount <= 0) ? 'paid' : 'pending',
-      qr_token: uuidv4(),
+      qr_token: null,
     }, { transaction: t });
 
     if (appliedCoupon) {
@@ -1492,14 +1491,16 @@ exports.createBooking = async (req, res, next) => {
       }, { transaction: t });
     }
 
-    await trip.increment('booked_seats', { by: numSeats, transaction: t });
+    if (walletPaymentRequested || final_amount <= 0) {
+      await confirmPaidBooking({ booking, transaction: t });
+    }
 
     await t.commit();
     const bookingData = booking.toJSON();
     res.status(201).json({
       status: 201,
       success: true,
-      message: walletPaymentRequested ? 'Booking created and paid from wallet' : 'Booking created successfully',
+      message: walletPaymentRequested ? 'Booking created and paid from wallet' : final_amount <= 0 ? 'Booking confirmed with no payment due' : 'Booking created and awaiting payment',
       data: {
         booking_id: booking.id,
         ...bookingData,
@@ -1563,6 +1564,7 @@ exports.cancelBooking = async (req, res, next) => {
       });
     }
 
+    const wasSeatAllocated = booking.booking_status === 'confirmed' && booking.payment_status === 'paid';
     // Update booking status
     await booking.update({
       booking_status: 'cancelled',
@@ -1574,7 +1576,7 @@ exports.cancelBooking = async (req, res, next) => {
     // Decrement booked seats on associated trip
     if (booking.trip_id) {
       const trip = await Trip.findByPk(booking.trip_id, { transaction: t });
-      if (trip && trip.booked_seats > 0) {
+      if (trip && wasSeatAllocated && trip.booked_seats > 0) {
         await trip.decrement('booked_seats', {
           by: Math.min(trip.booked_seats, booking.total_seats || 1),
           transaction: t,

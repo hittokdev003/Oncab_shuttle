@@ -1,8 +1,9 @@
 'use strict';
 
-const { Booking, Payment } = require('../models');
+const { Booking, Payment, Refund } = require('../models');
 const sequelize = require('../config/database');
 const { getPayUConfig, paymentHash, responseHash, secureCompare } = require('../utils/payu');
+const { confirmPaidBooking } = require('../services/bookingConfirmationService');
 
 const makeTxnId = () => `OC${Date.now()}${Math.floor(Math.random() * 100000).toString().padStart(5, '0')}`;
 const normalizeAmount = (amount) => Number(amount).toFixed(2);
@@ -16,9 +17,14 @@ const redirectToResult = (res, payment, status) => {
     if (payment?.booking_id) url.searchParams.set('booking_id', payment.booking_id);
     return res.redirect(303, url.toString());
   }
+  const messages = {
+    success: 'Payment successful',
+    refund_pending: 'Payment was received, but the seat is no longer available. A refund is pending.',
+    failed: 'Payment was not completed',
+  };
   return res.status(status === 'success' ? 200 : 400).json({
     success: status === 'success',
-    message: status === 'success' ? 'Payment successful' : 'Payment was not completed',
+    message: messages[status] || messages.failed,
     data: payment ? { booking_id: payment.booking_id, txnid: payment.payu_txnid, status: payment.status } : undefined,
   });
 };
@@ -115,8 +121,12 @@ exports.callback = async (req, res, next) => {
     }
 
     if (payment.status === 'captured') {
+      const pendingRefund = await Refund.findOne({
+        where: { payment_id: payment.id, status: ['pending', 'processing'] },
+        transaction,
+      });
       await transaction.commit();
-      return redirectToResult(res, payment, 'success');
+      return redirectToResult(res, payment, pendingRefund ? 'refund_pending' : 'success');
     }
 
     const succeeded = String(body.status || '').toLowerCase() === 'success';
@@ -140,6 +150,32 @@ exports.callback = async (req, res, next) => {
         payment_method: 'payu',
         transaction_id: txnid,
       }, { transaction });
+      if (succeeded) {
+        try {
+          await confirmPaidBooking({ booking, transaction });
+        } catch (activationError) {
+          if (!['SEAT_ALREADY_BOOKED', 'TRIP_CAPACITY_REACHED'].includes(activationError.code)) throw activationError;
+          await booking.update({
+            booking_status: 'cancelled',
+            status: 'Cancelled',
+            cancellation_reason: activationError.message,
+            cancelled_at: new Date(),
+          }, { transaction });
+          await Refund.create({
+            booking_id: booking.id,
+            payment_id: payment.id,
+            passenger_id: booking.passenger_id,
+            refund_reference: `REF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            refund_amount: booking.final_amount,
+            refund_method: 'payu',
+            refund_reason: 'Payment captured after the selected seat became unavailable',
+            status: 'pending',
+            notes: activationError.message,
+          }, { transaction });
+          await transaction.commit();
+          return redirectToResult(res, payment, 'refund_pending');
+        }
+      }
     }
     await transaction.commit();
     return redirectToResult(res, payment, succeeded ? 'success' : 'failed');

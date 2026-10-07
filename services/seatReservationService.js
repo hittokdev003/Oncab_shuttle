@@ -30,7 +30,7 @@ class SeatReservationService {
   /**
    * Check if any requested seat is already booked for a specific trip_id
    */
-  static async checkSeatConflict({ tripId, travelDate, requestedSeats, transaction }) {
+  static async checkSeatConflict({ tripId, travelDate, requestedSeats, excludeBookingId, transaction }) {
     if (!tripId || !requestedSeats || requestedSeats.length === 0) {
       return { hasConflict: false, bookedSeats: [] };
     }
@@ -66,9 +66,11 @@ class SeatReservationService {
 
     const whereObj = {
       trip_id: validTripIds,
-      booking_status: { [Op.notIn]: ['cancelled', 'Cancelled', 'CANCELLED'] },
+      booking_status: 'confirmed',
+      payment_status: { [Op.in]: ['paid', 'partial_refund', 'refunded'] },
       status: { [Op.notIn]: ['Cancelled', 'cancelled', 'CANCELLED', 'Payment Failed'] },
     };
+    if (excludeBookingId) whereObj.id = { [Op.ne]: Number(excludeBookingId) };
     if (travelDate) {
       whereObj.travel_date = travelDate;
     }

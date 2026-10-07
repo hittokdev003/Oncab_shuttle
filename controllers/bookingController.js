@@ -1,13 +1,13 @@
 'use strict';
 
 const { Op, fn, col } = require('sequelize');
-const { v4: uuidv4 } = require('uuid');
-const { Booking, Trip, CustomerUser, Stop, Payment, Refund, Coupon, CouponUsage, Route, Vehicle, Driver, DriverDetail } = require('../models');
+const { Booking, Trip, CustomerUser, Stop, Payment, Refund, Coupon, CouponUsage, Route, Vehicle, Driver, DriverDetail, BusType } = require('../models');
 const { logAction } = require('../middleware/auditLog');
 const sequelize = require('../config/database');
 const { calculateCouponDiscount } = require('../utils/coupon');
 const { resolveFare } = require('../utils/fareCalculator');
 const SeatReservationService = require('../services/seatReservationService');
+const { confirmPaidBooking } = require('../services/bookingConfirmationService');
 
 const calculateDistanceMeters = (lat1, lon1, lat2, lon2) => {
   if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
@@ -165,12 +165,11 @@ exports.create = async (req, res, next) => {
 
     const final_amount = Math.max(0, total_fare - discount_amount);
     const booking_reference = `BK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const boarding_pass_code = `BP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    const boarding_pin = Math.floor(1000 + Math.random() * 9000).toString();
-
     const booking = await Booking.create({
-      booking_reference, trip_id, passenger_id, passenger_name, passenger_mobile, passenger_email, origin_stop_id, destination_stop_id, travel_date, seat_numbers, total_seats: total_seats || 1, total_fare, discount_amount, final_amount, payment_method, coupon_id: appliedCoupon?.id || null, special_requests, boarding_pass_code, boarding_pin, booking_status: 'confirmed', payment_status: final_amount <= 0 ? 'paid' : 'pending', qr_token: uuidv4(),
+      booking_reference, trip_id, passenger_id, passenger_name, passenger_mobile, passenger_email, origin_stop_id, destination_stop_id, travel_date, seat_numbers, total_seats: total_seats || 1, total_fare, discount_amount, final_amount, payment_method, coupon_id: appliedCoupon?.id || null, special_requests, boarding_pass_code: null, boarding_pin: null, booking_status: 'pending', payment_status: final_amount <= 0 ? 'paid' : 'pending', qr_token: null,
     }, { transaction: t });
+
+    if (final_amount <= 0) await confirmPaidBooking({ booking, transaction: t });
 
     if (appliedCoupon) {
       await CouponUsage.create({
@@ -182,14 +181,12 @@ exports.create = async (req, res, next) => {
       }, { transaction: t });
     }
 
-    await trip.increment('booked_seats', { by: total_seats || 1, transaction: t });
-
     await logAction({ userId: req.user?.id, userType: req.user?.role?.name, userName: req.user?.name, action: 'create', module: 'bookings', entityType: 'Booking', entityId: booking.id, newValues: { booking_reference, trip_id, final_amount }, ipAddress: req.ip, description: `Created booking ${booking_reference}` });
 
     await t.commit();
     const created = await Booking.findByPk(booking.id, { include: BOOKING_INCLUDE });
     const createdData = created.toJSON();
-    res.status(201).json({ success: true, message: 'Booking confirmed', data: { booking_id: created.id, ...createdData } });
+    res.status(201).json({ success: true, message: final_amount <= 0 ? 'Booking confirmed' : 'Booking created and awaiting payment', data: { booking_id: created.id, ...createdData } });
   } catch (err) {
     await t.rollback();
     next(err);
@@ -204,11 +201,12 @@ exports.cancel = async (req, res, next) => {
     if (!booking) { await t.rollback(); return res.status(404).json({ success: false, message: 'Booking not found' }); }
     if (booking.booking_status === 'cancelled') { await t.rollback(); return res.status(400).json({ success: false, message: 'Booking already cancelled' }); }
 
+    const wasSeatAllocated = booking.booking_status === 'confirmed' && booking.payment_status === 'paid';
     const { cancellation_reason } = req.body;
     await booking.update({ booking_status: 'cancelled', status: 'Cancelled', cancellation_reason, cancelled_at: new Date(), cancelled_by: req.user?.id }, { transaction: t });
 
     const trip = await Trip.findByPk(booking.trip_id, { transaction: t });
-    if (trip) await trip.decrement('booked_seats', { by: booking.total_seats, transaction: t });
+    if (trip && wasSeatAllocated) await trip.decrement('booked_seats', { by: booking.total_seats, transaction: t });
 
     // Auto-create refund if payment was captured
     if (booking.payment_status === 'paid') {
@@ -245,16 +243,27 @@ exports.cancelledList = async (req, res, next) => {
 
 // ── Update Booking Payment ─────────────────────────────────
 exports.updatePayment = async (req, res, next) => {
+  const t = await sequelize.transaction();
   try {
-    const booking = await Booking.findByPk(req.params.id);
-    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    const booking = await Booking.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!booking) { await t.rollback(); return res.status(404).json({ success: false, message: 'Booking not found' }); }
     const { payment_status, transaction_id, payment_method } = req.body;
-    await booking.update({ payment_status, transaction_id, payment_method });
-    if (payment_status === 'paid') {
-      await Payment.create({ booking_id: booking.id, passenger_id: booking.passenger_id, amount: booking.final_amount, payment_method, status: 'captured' });
+    if (booking.booking_status === 'cancelled' && payment_status === 'paid') {
+      await t.rollback();
+      return res.status(409).json({ success: false, message: 'Cancelled booking cannot be marked paid' });
     }
+    const wasPaid = booking.payment_status === 'paid';
+    await booking.update({ payment_status, transaction_id, payment_method }, { transaction: t });
+    if (payment_status === 'paid') {
+      if (!wasPaid && Number(booking.final_amount) > 0) {
+        await Payment.create({ booking_id: booking.id, passenger_id: booking.passenger_id, amount: booking.final_amount, payment_method, status: 'captured' }, { transaction: t });
+      }
+      await confirmPaidBooking({ booking, transaction: t });
+    }
+    await t.commit();
     res.json({ success: true, message: 'Payment updated', data: booking });
   } catch (err) {
+    if (!t.finished) await t.rollback();
     next(err);
   }
 };
