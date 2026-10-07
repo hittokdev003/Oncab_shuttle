@@ -7,7 +7,7 @@ const Trip = sequelize.define('Trip', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
   route_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   bus_type_id: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: null },
-  schedule_code: { type: DataTypes.STRING(30), allowNull: false, unique: true },
+  schedule_code: { type: DataTypes.STRING(30), allowNull: false },
   departure_time: { type: DataTypes.TIME, allowNull: false },
   arrival_time: { type: DataTypes.TIME, defaultValue: null },
   operating_days: { type: DataTypes.STRING(100), defaultValue: null },
@@ -29,6 +29,13 @@ const Trip = sequelize.define('Trip', {
   updatedAt: 'updated_at',
   paranoid: true,
   deletedAt: 'deleted_at',
+  indexes: [
+    {
+      unique: true,
+      fields: ['schedule_code', 'trip_date'],
+      name: 'unique_schedule_code_trip_date',
+    },
+  ],
 });
 
 module.exports = Trip;

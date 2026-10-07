@@ -321,6 +321,7 @@ exports.assignmentOptions = async (req, res, next) => {
 // ── Core Function: Generate/Update Individual Daily Trip Rows for Date Range ──
 const processTripDateRange = async ({
   scheduleCode,
+  oldScheduleCode = null,
   routeId,
   busTypeId,
   driverId,
@@ -346,9 +347,11 @@ const processTripDateRange = async ({
     throw new Error('Invalid valid_from or valid_until date format');
   }
 
-  // Find all existing trips belonging to this schedule_code
+  const searchScheduleCodes = Array.from(new Set([scheduleCode, oldScheduleCode].filter(Boolean)));
+
+  // Find all existing trips belonging to this schedule_code (or oldScheduleCode)
   const existingTrips = await Trip.findAll({
-    where: { schedule_code: scheduleCode },
+    where: { schedule_code: { [Op.in]: searchScheduleCodes } },
     transaction,
   });
 
@@ -377,6 +380,7 @@ const processTripDateRange = async ({
         const existingTrip = existingMap.get(dateStr);
         await existingTrip.update(
           {
+            schedule_code: scheduleCode,
             route_id: routeId,
             bus_type_id: busTypeId,
             driver_id: driverId,
@@ -427,7 +431,7 @@ const processTripDateRange = async ({
           );
           resultTrips.push(newTrip);
         } else {
-          // If duplicate exists under route/time, update its details
+          // If duplicate exists under route/time or schedule_code + trip_date, update its details
           await duplicateCheck.update(
             {
               schedule_code: scheduleCode,
@@ -590,6 +594,7 @@ exports.update = async (req, res, next) => {
 
     const updatedTrips = await processTripDateRange({
       scheduleCode,
+      oldScheduleCode: targetTrip.schedule_code,
       routeId: payload.route_id ? parseInt(payload.route_id) : targetTrip.route_id,
       busTypeId: payload.bus_type_id || targetTrip.bus_type_id,
       driverId: payload.driver_id !== undefined ? (payload.driver_id ? parseInt(payload.driver_id) : null) : targetTrip.driver_id,

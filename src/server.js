@@ -96,12 +96,15 @@ app.use(notFound);
 app.use(errorHandler);
 
 // ── Start Server ─────────────────────────────────────────────
+const { ensureTripsIndex } = require('../utils/dbIndexMigrator');
+
 const PORT = parseInt(process.env.PORT || '4000');
 
 const startServer = async () => {
   try {
     await sequelize.authenticate();
     console.log('✅ Database connected successfully');
+    await ensureTripsIndex();
     // Sync models (use migrations in production)
     if (process.env.NODE_ENV === 'development') {
       await sequelize.sync({ alter: false });
