@@ -5,7 +5,7 @@ const sequelize = require('../config/database');
 
 const Stop = sequelize.define('Stop', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
-  route_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  route_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true, defaultValue: null },
   stop_name: { type: DataTypes.STRING(150), allowNull: false },
   stop_code: { type: DataTypes.STRING(30), defaultValue: null },
   stop_sequence: { type: DataTypes.INTEGER, defaultValue: 0 },
