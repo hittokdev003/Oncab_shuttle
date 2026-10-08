@@ -495,6 +495,9 @@ exports.create = async (req, res, next) => {
       status = 'Scheduled',
     } = req.body;
 
+    const targetDate = normalizeDateStr(trip_date || valid_from || new Date().toISOString().split('T')[0]);
+    const endDate = valid_until ? normalizeDateStr(valid_until) : targetDate;
+
     if (!schedule_code) {
       schedule_code = `SCH-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     }
@@ -506,6 +509,83 @@ exports.create = async (req, res, next) => {
       }
     }
 
+    // Single Date Creation (when valid_until is not specified or equals targetDate)
+    if (!valid_until || endDate === targetDate) {
+      const duplicateCheck = await Trip.findOne({
+        where: {
+          [Op.or]: [
+            { schedule_code, trip_date: targetDate },
+            { route_id: parseInt(route_id), departure_time, trip_date: targetDate },
+          ],
+        },
+        transaction: t,
+      });
+
+      let trip;
+      if (duplicateCheck) {
+        await duplicateCheck.update({
+          schedule_code,
+          route_id: parseInt(route_id),
+          bus_type_id: bus_type_id ? parseInt(bus_type_id) : null,
+          driver_id: driver_id ? parseInt(driver_id) : null,
+          vehicle_id: vehicle_id ? parseInt(vehicle_id) : null,
+          departure_time,
+          arrival_time: arrival_time || null,
+          operating_days: operating_days || null,
+          trip_date: targetDate,
+          valid_from: targetDate,
+          valid_until: targetDate,
+          seat_capacity: seat_capacity ? parseInt(seat_capacity) : 40,
+          status,
+          notes: notes !== undefined ? notes : duplicateCheck.notes,
+        }, { transaction: t });
+        trip = duplicateCheck;
+      } else {
+        trip = await Trip.create({
+          schedule_code,
+          route_id: parseInt(route_id),
+          bus_type_id: bus_type_id ? parseInt(bus_type_id) : null,
+          driver_id: driver_id ? parseInt(driver_id) : null,
+          vehicle_id: vehicle_id ? parseInt(vehicle_id) : null,
+          departure_time,
+          arrival_time: arrival_time || null,
+          operating_days: operating_days || null,
+          trip_date: targetDate,
+          valid_from: targetDate,
+          valid_until: targetDate,
+          seat_capacity: seat_capacity ? parseInt(seat_capacity) : 40,
+          status,
+          notes,
+        }, { transaction: t });
+      }
+
+      await logAction({
+        userId: req.user?.id,
+        userType: req.user?.role?.name,
+        userName: req.user?.name,
+        action: 'create',
+        module: 'trips',
+        entityType: 'Trip',
+        entityId: trip.id,
+        newValues: { schedule_code, trip_date: targetDate },
+        ipAddress: req.ip,
+        description: `Created trip record for schedule ${schedule_code} on ${targetDate}`,
+      });
+
+      await t.commit();
+
+      const fullTrip = await Trip.findByPk(trip.id, {
+        include: scopeTripIncludes(req, TRIP_INCLUDE),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: `Trip created successfully for ${targetDate}`,
+        data: fullTrip,
+      });
+    }
+
+    // Range Creation (if valid_until is explicitly provided as a range)
     const createdTrips = await processTripDateRange({
       scheduleCode: schedule_code,
       routeId: parseInt(route_id),
@@ -514,10 +594,10 @@ exports.create = async (req, res, next) => {
       vehicleId: vehicle_id ? parseInt(vehicle_id) : null,
       departureTime: departure_time,
       arrivalTime: arrival_time || null,
-      operatingDays: operating_days || '1,2,3,4,5',
-      validFrom: valid_from || trip_date,
-      validUntil: valid_until || valid_from || trip_date,
-      singleTripDate: trip_date,
+      operatingDays: operating_days || '1,2,3,4,5,6,7',
+      validFrom: targetDate,
+      validUntil: endDate,
+      singleTripDate: targetDate,
       status,
       notes,
       seatCapacity: seat_capacity ? parseInt(seat_capacity) : 40,
@@ -580,6 +660,7 @@ exports.update = async (req, res, next) => {
 
     const payload = { ...req.body };
     const scheduleCode = payload.schedule_code || targetTrip.schedule_code;
+    const targetDate = normalizeDateStr(payload.trip_date || payload.valid_from || targetTrip.trip_date || targetTrip.valid_from || new Date().toISOString().split('T')[0]);
 
     if (!payload.bus_type_id && payload.vehicle_id) {
       const vehicle = await Vehicle.findByPk(payload.vehicle_id, { transaction: t });
@@ -600,11 +681,22 @@ exports.update = async (req, res, next) => {
       validFrom: payload.valid_from || targetTrip.valid_from || targetTrip.trip_date,
       validUntil: payload.valid_until || targetTrip.valid_until || payload.valid_from || targetTrip.trip_date,
       singleTripDate: payload.trip_date || targetTrip.trip_date,
+    await targetTrip.update({
+      schedule_code: scheduleCode,
+      route_id: payload.route_id ? parseInt(payload.route_id) : targetTrip.route_id,
+      bus_type_id: payload.bus_type_id !== undefined ? payload.bus_type_id : targetTrip.bus_type_id,
+      driver_id: payload.driver_id !== undefined ? (payload.driver_id ? parseInt(payload.driver_id) : null) : targetTrip.driver_id,
+      vehicle_id: payload.vehicle_id !== undefined ? (payload.vehicle_id ? parseInt(payload.vehicle_id) : null) : targetTrip.vehicle_id,
+      departure_time: payload.departure_time || targetTrip.departure_time,
+      arrival_time: payload.arrival_time !== undefined ? payload.arrival_time : targetTrip.arrival_time,
+      operating_days: payload.operating_days !== undefined ? payload.operating_days : targetTrip.operating_days,
+      trip_date: targetDate,
+      valid_from: targetDate,
+      valid_until: payload.valid_until ? normalizeDateStr(payload.valid_until) : targetDate,
       status: payload.status || targetTrip.status || 'Scheduled',
       notes: payload.notes !== undefined ? payload.notes : targetTrip.notes,
-      seatCapacity: payload.seat_capacity ? parseInt(payload.seat_capacity) : targetTrip.seat_capacity,
-      transaction: t,
-    });
+      seat_capacity: payload.seat_capacity ? parseInt(payload.seat_capacity) : targetTrip.seat_capacity,
+    }, { transaction: t });
 
     await logAction({
       userId: req.user?.id,
@@ -614,25 +706,21 @@ exports.update = async (req, res, next) => {
       module: 'trips',
       entityType: 'Trip',
       entityId: targetTrip.id,
-      newValues: { schedule_code: scheduleCode, total_synced: updatedTrips.length },
+      newValues: { schedule_code: scheduleCode, trip_date: targetDate },
       ipAddress: req.ip,
-      description: `Updated trip schedule ${scheduleCode} (${updatedTrips.length} daily records synced)`,
+      description: `Updated trip #${targetTrip.id} (${scheduleCode})`,
     });
 
     await t.commit();
 
-    const tripIds = updatedTrips.map((tr) => tr.id);
-    const fullTrips = await Trip.findAll({
-      where: { id: { [Op.in]: tripIds } },
+    const fullTrip = await Trip.findByPk(targetTrip.id, {
       include: scopeTripIncludes(req, TRIP_INCLUDE),
-      order: [['trip_date', 'ASC']],
     });
 
     res.json({
       success: true,
-      message: `Trip schedule updated (${fullTrips.length} daily trip records synced)`,
-      data: fullTrips.length === 1 ? fullTrips[0] : fullTrips,
-      count: fullTrips.length,
+      message: 'Trip updated successfully',
+      data: fullTrip,
     });
   } catch (err) {
     await t.rollback();
