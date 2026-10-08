@@ -96,9 +96,11 @@ export const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, co
 // ── Badge ──────────────────────────────────────────────────
 interface BadgeProps {
   children: React.ReactNode;
-  color?: 'green' | 'red' | 'yellow' | 'blue' | 'purple' | 'gray' | 'orange';
+  color?: 'green' | 'red' | 'yellow' | 'blue' | 'purple' | 'gray' | 'orange' | 'emerald' | 'slate';
 }
-const BADGE_COLORS = {
+const BADGE_COLORS: Record<string, string> = {
+  emerald: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60',
+  slate: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
   green: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60',
   red: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60',
   yellow: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60',
@@ -249,8 +251,10 @@ interface ButtonProps {
   loading?: boolean;
   type?: 'button' | 'submit' | 'reset';
   className?: string;
+  title?: string;
+  icon?: React.ElementType;
 }
-export const Button: React.FC<ButtonProps> = ({ children, onClick, variant = 'primary', size = 'md', disabled, loading, type = 'button', className = '' }) => {
+export const Button: React.FC<ButtonProps> = ({ children, onClick, variant = 'primary', size = 'md', disabled, loading, type = 'button', className = '', title, icon: Icon }) => {
   const VARIANTS = {
     primary: 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm border-transparent',
     secondary: 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60',
@@ -268,9 +272,14 @@ export const Button: React.FC<ButtonProps> = ({ children, onClick, variant = 'pr
       type={type}
       onClick={onClick}
       disabled={disabled || loading}
+      title={title}
       className={`inline-flex items-center justify-center font-medium rounded-xl transition-all duration-150 border ${VARIANTS[variant]} ${SIZES[size]} ${disabled || loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${className}`}
     >
-      {loading && <Loader2 size={size === 'sm' ? 12 : 14} className="animate-spin" />}
+      {loading ? (
+        <Loader2 size={size === 'sm' ? 12 : 14} className="animate-spin" />
+      ) : Icon ? (
+        <Icon size={size === 'sm' ? 12 : 14} />
+      ) : null}
       {children}
     </button>
   );

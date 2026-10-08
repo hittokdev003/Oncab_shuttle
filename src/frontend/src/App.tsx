@@ -193,7 +193,7 @@
 
 
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
@@ -343,6 +343,12 @@ const SettingsPage = React.lazy(() =>
   import('./pages/SettingsPage').then(m => ({
     default: m.SettingsPage
   }))
+);
+
+const PageWrapper = ({ children }: { children: React.ReactNode }) => (
+  <React.Suspense fallback={<LoadingState />}>
+    {children}
+  </React.Suspense>
 );
 
 // ── Toast ──────────────────────────────────────────────────
@@ -546,6 +552,13 @@ const AppInner: React.FC = () => {
     []
   );
 
+  const pageProps = useMemo(
+    () => ({
+      onNotify: notify
+    }),
+    [notify]
+  );
+
   // ── Fetch Unread Notifications ──────────────────────────
 
   useEffect(() => {
@@ -609,22 +622,8 @@ const AppInner: React.FC = () => {
   const approvalRoleAllowed = currentView !== 'owner-requests' || hasRole(user, 'admin') || hasRole(user, 'owner');
   const activeView = approvalRoleAllowed && (!activeViewPermission || hasPermission(activeViewPermission)) ? currentView : 'dashboard';
 
-  // ── Render Current Page ─────────────────────────────────
-
   const renderPage = () => {
-    const props = {
-      onNotify: notify
-    };
-
-    const PageWrapper = ({
-      children
-    }: {
-      children: React.ReactNode;
-    }) => (
-      <React.Suspense fallback={<LoadingState />}>
-        {children}
-      </React.Suspense>
-    );
+    const props = pageProps;
 
     switch (activeView) {
       case 'dashboard':

@@ -239,8 +239,14 @@ exports.create = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'stop_name is required' });
     }
 
+    let targetRouteId = body.route_id ? parseInt(body.route_id) : null;
+    if (!targetRouteId) {
+      const firstRoute = await Route.findOne({ attributes: ['id'] });
+      targetRouteId = firstRoute ? firstRoute.id : 1;
+    }
+
     const stop = await Stop.create({
-      route_id: 0,
+      route_id: targetRouteId,
       stop_name: String(stop_name).trim(),
       stop_code: stop_code ? String(stop_code).trim() : null,
       latitude: latitude ? parseFloat(latitude) : null,

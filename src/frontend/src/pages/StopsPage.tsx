@@ -115,7 +115,7 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
     setPage(1);
   }, [search, statusFilter]);
 
-  // Live debounced place search suggestions & auto map positioning as user types
+  // Live debounced place search suggestions list as user types in place search bar
   useEffect(() => {
     if (!mapSearchQuery || mapSearchQuery.trim().length < 2) {
       setSuggestions([]);
@@ -132,25 +132,6 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
           if (Array.isArray(data) && data.length > 0) {
             setSuggestions(data);
             setShowSuggestions(true);
-
-            // Automatically focus and show place on map if triggered by active user typing
-            if (userTypingRef.current) {
-              const topItem = data[0];
-              const lat = parseFloat(topItem.lat);
-              const lng = parseFloat(topItem.lon);
-              if (!isNaN(lat) && !isNaN(lng)) {
-                const latFixed = lat.toFixed(7);
-                const lngFixed = lng.toFixed(7);
-                setForm((prev) => ({
-                  ...prev,
-                  latitude: latFixed,
-                  longitude: lngFixed,
-                  address: topItem.display_name,
-                }));
-                setMapCenter([lat, lng]);
-                checkNearby(latFixed, lngFixed);
-              }
-            }
           } else {
             setSuggestions([]);
           }
@@ -237,7 +218,6 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
       setMapSearchQuery(placeName);
       setShowSuggestions(false);
       checkNearby(latFixed, lngFixed);
-      onNotify(`Map centered at: ${placeName}`);
     }
   };
 
@@ -626,9 +606,15 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
                       value={form.stop_name}
                       onChange={(e) => {
                         const val = e.target.value;
-                        userTypingRef.current = true;
                         setForm((prev) => ({ ...prev, stop_name: val }));
-                        setMapSearchQuery(val);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (form.stop_name.trim()) {
+                            handleSearchMapLocation(form.stop_name);
+                          }
+                        }
                       }}
                       className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
                     />
@@ -831,7 +817,11 @@ export const StopsPage: React.FC<StopsPageProps> = ({ onNotify }) => {
                           return (
                             <div
                               key={idx}
-                              onClick={() => handleSelectSuggestion(item)}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSelectSuggestion(item);
+                              }}
                               className="p-2.5 hover:bg-indigo-950/80 cursor-pointer flex items-start gap-2 text-slate-200 hover:text-white transition-colors"
                             >
                               <MapPin size={15} className="text-indigo-400 mt-0.5 shrink-0" />

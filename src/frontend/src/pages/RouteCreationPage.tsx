@@ -151,6 +151,87 @@ export const RouteCreationPage: React.FC<RouteCreationPageProps> = ({ onNotify }
     return () => clearTimeout(timer);
   }, [existingStopQuery]);
 
+  // Auto-calculate Total Distance (km) & Estimated Duration (mins) from Stops Sequence Coordinates
+  const autoCalculateMetricsFromStops = useCallback((list: RouteStopItem[], forceUpdate = false) => {
+    if (!list || list.length < 2) return;
+
+    let totalDistKm = 0;
+    let validLegs = 0;
+
+    for (let i = 0; i < list.length - 1; i++) {
+      const s1 = list[i];
+      const s2 = list[i + 1];
+
+      const lat1 = parseFloat(s1.latitude);
+      const lon1 = parseFloat(s1.longitude);
+      const lat2 = parseFloat(s2.latitude);
+      const lon2 = parseFloat(s2.longitude);
+
+      if (!isNaN(lat1) && !isNaN(lon1) && !isNaN(lat2) && !isNaN(lon2)) {
+        const R = 6371; // Earth radius in km
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLon = ((lon2 - lon1) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const directKm = R * c;
+
+        // Apply road route factor (~1.25x for urban road network geometry)
+        const roadDistKm = directKm * 1.25;
+        totalDistKm += roadDistKm;
+        validLegs++;
+      }
+    }
+
+    if (validLegs > 0) {
+      const calcDist = Math.round(totalDistKm * 100) / 100;
+      const calcDuration = Math.max(5, Math.round((totalDistKm / 25) * 60 + (list.length - 1) * 1.5));
+
+      const firstStopName = list[0]?.stop_name?.split('-')[0]?.split(',')[0]?.trim() || '';
+      const lastStopName = list[list.length - 1]?.stop_name?.split('-')[0]?.split(',')[0]?.trim() || '';
+
+      setForm((prev) => {
+        const updated = { ...prev };
+        // Auto update distance & duration if empty or zero or forced
+        if (forceUpdate || !prev.total_distance || prev.total_distance === '0') {
+          updated.total_distance = String(calcDist);
+        }
+        if (forceUpdate || !prev.estimated_duration || prev.estimated_duration === '0') {
+          updated.estimated_duration = String(calcDuration);
+        }
+        // Auto fill origin & destination city if empty
+        if (!prev.origin_city && firstStopName) {
+          updated.origin_city = firstStopName;
+        }
+        if (!prev.destination_city && lastStopName) {
+          updated.destination_city = lastStopName;
+        }
+        // Auto fill route name if empty
+        if (!prev.route_name && firstStopName && lastStopName) {
+          updated.route_name = `${firstStopName}-${lastStopName}`;
+        }
+        // Auto fill route code if empty
+        if (!prev.route_code && firstStopName && lastStopName) {
+          const code1 = firstStopName.substring(0, 3).toUpperCase();
+          const code2 = lastStopName.substring(0, 3).toUpperCase();
+          updated.route_code = `${code1}-${code2}-001`;
+        }
+        return updated;
+      });
+    }
+  }, []);
+
+  // Whenever stopsList changes in modal, auto-calculate metrics
+  useEffect(() => {
+    if (showModal && stopsList.length >= 2) {
+      autoCalculateMetricsFromStops(stopsList);
+    }
+  }, [stopsList, showModal, autoCalculateMetricsFromStops]);
+
   const openCreate = () => {
     setEditRoute(null);
     setForm({
@@ -641,24 +722,44 @@ export const RouteCreationPage: React.FC<RouteCreationPageProps> = ({ onNotify }
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Total Distance (km)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-slate-300">Total Distance (km)</label>
+                    <button
+                      type="button"
+                      onClick={() => autoCalculateMetricsFromStops(stopsList, true)}
+                      title="Auto-calculate distance from stops coordinates"
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1"
+                    >
+                      <RefreshCw size={10} /> Auto-Calc
+                    </button>
+                  </div>
                   <input
                     type="number"
                     step="0.01"
                     placeholder="Total Distance"
                     value={form.total_distance}
                     onChange={(e) => setForm({ ...form, total_distance: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Estimated Duration (mins)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-slate-300">Estimated Duration (mins)</label>
+                    <button
+                      type="button"
+                      onClick={() => autoCalculateMetricsFromStops(stopsList, true)}
+                      title="Auto-calculate duration from distance & stop sequence"
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1"
+                    >
+                      <RefreshCw size={10} /> Auto-Calc
+                    </button>
+                  </div>
                   <input
                     type="number"
                     placeholder="Duration"
                     value={form.estimated_duration}
                     onChange={(e) => setForm({ ...form, estimated_duration: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
                   />
                 </div>
                 <div>
