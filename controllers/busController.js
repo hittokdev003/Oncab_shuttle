@@ -966,6 +966,7 @@ exports.getUserBookings = async (req, res, next) => {
   try {
     const body = req.body || {};
     const query = req.query || {};
+    const booking_id = query.booking_id || body.booking_id;
     const passenger_id = query.passenger_id || body.passenger_id;
     const passenger_mobile = query.passenger_mobile || body.passenger_mobile;
     const booking_status = query.booking_status || body.booking_status;
@@ -974,6 +975,13 @@ exports.getUserBookings = async (req, res, next) => {
     const limit = query.limit || body.limit || 20;
 
     const where = {};
+    if (booking_id) {
+      const parsedBookingId = Number(booking_id);
+      if (!Number.isInteger(parsedBookingId) || parsedBookingId <= 0) {
+        return res.status(400).json({ status: 400, success: false, message: 'booking_id must be a positive integer' });
+      }
+      where.id = parsedBookingId;
+    }
     if (passenger_id) where.passenger_id = passenger_id;
     if (passenger_mobile) where.passenger_mobile = passenger_mobile;
     if (booking_status) where.booking_status = booking_status;
@@ -988,13 +996,23 @@ exports.getUserBookings = async (req, res, next) => {
           model: Trip,
           as: 'trip',
           include: [
-            { model: Route, as: 'route', required: false },
+            {
+              model: Route,
+              as: 'route',
+              include: [{
+                model: Stop,
+                as: 'stops',
+                attributes: ['id', 'stop_name', 'stop_code', 'stop_sequence', 'latitude', 'longitude', 'address', 'landmark'],
+                required: false,
+              }],
+              required: false,
+            },
             { model: Vehicle, as: 'vehicle', attributes: ['id', 'registration_number', 'company_model', 'color', 'latitude', 'longitude', 'status'], required: false },
             {
               model: Driver,
               as: 'driver',
               attributes: ['id', 'name', 'mobile'],
-              include: [{ model: DriverDetail, as: 'details', attributes: ['latitude', 'longitude', 'location_speed_kmh', 'location_heading', 'updated_at'], required: false }],
+              include: [{ model: DriverDetail, as: 'details', attributes: ['latitude', 'longitude', 'location_speed_kmh', 'location_heading', 'location_trip_id', 'updated_at'], required: false }],
               required: false,
             },
           ],
@@ -1017,10 +1035,27 @@ exports.getUserBookings = async (req, res, next) => {
       const driverDetail = driver.details || {};
       const originStop = b.origin_stop || {};
 
-      const rawBusLat = driverDetail.latitude != null ? driverDetail.latitude : vehicle.latitude;
-      const rawBusLng = driverDetail.longitude != null ? driverDetail.longitude : vehicle.longitude;
+      if (trip.route?.stops) {
+        trip.route.stops = trip.route.stops
+          .slice()
+          .sort((stopA, stopB) => (Number(stopA.stop_sequence) || 0) - (Number(stopB.stop_sequence) || 0))
+          .map((stop) => ({
+            ...stop,
+            latitude: stop.latitude == null ? null : Number(stop.latitude),
+            longitude: stop.longitude == null ? null : Number(stop.longitude),
+          }));
+      }
+
+      const rawBusLat = driverDetail.latitude;
+      const rawBusLng = driverDetail.longitude;
       const busLat = rawBusLat != null && rawBusLat !== '' ? Number(rawBusLat) : null;
       const busLng = rawBusLng != null && rawBusLng !== '' ? Number(rawBusLng) : null;
+      const locationMatchesTrip = driverDetail.location_trip_id == null
+        || Number(driverDetail.location_trip_id) === Number(trip.id);
+      const hasDriverLocation = locationMatchesTrip
+        && busLat != null && busLng != null
+        && Number.isFinite(busLat) && Number.isFinite(busLng)
+        && Math.abs(busLat) <= 90 && Math.abs(busLng) <= 180;
 
       const rawStopLat = originStop.latitude;
       const rawStopLng = originStop.longitude;
@@ -1030,7 +1065,7 @@ exports.getUserBookings = async (req, res, next) => {
       let distanceMeters = null;
       let etaMinutes = null;
 
-      if (busLat != null && busLng != null && stopLat != null && stopLng != null && Number.isFinite(busLat) && Number.isFinite(busLng) && Number.isFinite(stopLat) && Number.isFinite(stopLng)) {
+      if (hasDriverLocation && stopLat != null && stopLng != null && Number.isFinite(stopLat) && Number.isFinite(stopLng)) {
         distanceMeters = Math.round(calcDistanceMeters(busLat, busLng, stopLat, stopLng));
         const speedKmh = Number(driverDetail.location_speed_kmh) > 5 ? Number(driverDetail.location_speed_kmh) : 25;
         const speedMetersPerMin = (speedKmh * 1000) / 60;
@@ -1039,8 +1074,8 @@ exports.getUserBookings = async (req, res, next) => {
 
       b.tracking = {
         bus_status: trip.status || 'Scheduled',
-        is_live: busLat != null && busLng != null && Number.isFinite(busLat) && Number.isFinite(busLng),
-        current_location: busLat != null && busLng != null && Number.isFinite(busLat) && Number.isFinite(busLng) ? {
+        is_live: hasDriverLocation,
+        current_location: hasDriverLocation ? {
           latitude: busLat,
           longitude: busLng,
           speed_kmh: Number(driverDetail.location_speed_kmh || 0),

@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op, fn, col, literal } = require('sequelize');
-const { Booking, Trip, Driver, Vehicle, Passenger, CustomerUser, Payment, Refund, Route, AuditLog, AdminUser } = require('../models');
+const { Booking, Trip, Driver, Vehicle, Passenger, CustomerUser, Payment, Refund, Route, AuditLog, AdminUser, Role } = require('../models');
 const sequelize = require('../config/database');
 const { hasRole } = require('../utils/roles');
 const SeatReservationService = require('../services/seatReservationService');
@@ -57,6 +57,54 @@ exports.stats = async (req, res, next) => {
     const ownerBookingIds = isOwner
       ? (await Booking.findAll({ attributes: ['id'], where: ownerBookingWhere, raw: true })).map((booking) => booking.id)
       : [];
+    let ownerRevenueSummary = {};
+    if (isOwner && ownerTripIds.length) {
+      const eligibleBookings = await Booking.findAll({
+        attributes: ['id', 'trip_id', 'travel_date', 'seat_numbers', 'total_seats', 'total_fare', 'created_at'],
+        where: {
+          ...ownerBookingWhere,
+          booking_status: 'confirmed',
+          payment_status: 'paid',
+          boarding_status: 'boarded',
+        },
+        order: [['created_at', 'ASC'], ['id', 'ASC']],
+      });
+      const calculateDistinctRevenue = (rows) => {
+        const groupedSeats = new Map();
+        const revenueByGroup = new Map();
+        for (const booking of rows) {
+          const groupKey = `${booking.trip_id}:${booking.travel_date}`;
+          if (!groupedSeats.has(groupKey)) groupedSeats.set(groupKey, new Set());
+          const seats = groupedSeats.get(groupKey);
+          const seatNumbers = SeatReservationService.parseSeatNumbers(booking.seat_numbers);
+          const seatCount = seatNumbers.length || Math.max(1, Number(booking.total_seats) || 1);
+          const fare = Math.max(0, Number(booking.total_fare) || 0) / seatCount;
+          if (seatNumbers.length) {
+            for (const seat of seatNumbers) {
+              const identity = normalizeSeatIdentity(seat);
+              if (!seats.has(identity)) seats.add(identity);
+              else continue;
+              revenueByGroup.set(groupKey, addMoney(revenueByGroup.get(groupKey) || 0, fare));
+            }
+          } else {
+            for (let index = 0; index < seatCount; index += 1) {
+              const identity = `booking:${booking.id}:${index}`;
+              if (!seats.has(identity)) seats.add(identity);
+              revenueByGroup.set(groupKey, addMoney(revenueByGroup.get(groupKey) || 0, fare));
+            }
+          }
+        }
+        const distinctSeats = [...groupedSeats.values()].reduce((total, seats) => total + seats.size, 0);
+        const revenue = [...revenueByGroup.values()].reduce((total, amount) => addMoney(total, amount), 0);
+        return { revenue, distinctSeats };
+      };
+      const allRevenue = calculateDistinctRevenue(eligibleBookings);
+      const todayStart = new Date(today);
+      const todayRevenue = calculateDistinctRevenue(eligibleBookings.filter((booking) => new Date(booking.created_at) >= todayStart));
+      ownerRevenueSummary = {
+        revenue: { total: allRevenue.revenue, today: todayRevenue.revenue, distinctSeats: allRevenue.distinctSeats },
+      };
+    }
     const [
       totalTrips, todayTrips, activeTrips,
       totalBookings, todayBookings, confirmedBookings,
@@ -172,6 +220,7 @@ exports.stats = async (req, res, next) => {
           drivers: { total: totalDrivers, active: activeDrivers },
           vehicles: { total: totalVehicles, active: activeVehicles },
           passengers: { total: totalPassengers },
+          ...ownerRevenueSummary,
           ...adminFinancialSummary,
         },
         charts: {
@@ -240,12 +289,16 @@ exports.revenueReport = async (req, res, next) => {
     }
 
     const bookingWhere = {
-      booking_status: { [Op.in]: ['confirmed', 'completed'] },
+      booking_status: isOwner ? 'confirmed' : { [Op.in]: ['confirmed', 'completed'] },
       created_at: { [Op.between]: [startDate, endDate] },
     };
+    if (isOwner) {
+      bookingWhere.payment_status = 'paid';
+      bookingWhere.boarding_status = 'boarded';
+    }
     if (ownerTripIds) bookingWhere.trip_id = { [Op.in]: ownerTripIds };
     const bookings = await Booking.findAll({
-      attributes: ['id', 'trip_id', 'travel_date', 'seat_numbers', 'total_seats', 'total_fare', 'discount_amount', 'final_amount', 'created_at'],
+      attributes: ['id', 'trip_id', 'travel_date', 'seat_numbers', 'total_seats', 'total_fare', 'discount_amount', 'final_amount', 'created_at', 'payment_status', 'boarding_status'],
       where: bookingWhere,
       order: [['created_at', 'ASC'], ['id', 'ASC']],
     });
@@ -262,14 +315,15 @@ exports.revenueReport = async (req, res, next) => {
     }) : [];
     const tripById = new Map(trips.map((trip) => [Number(trip.id), trip]));
     const tripSeatGroups = new Map();
+    const bookingRevenueGroups = new Map();
     for (const booking of bookings) {
       const trip = tripById.get(Number(booking.trip_id));
       if (!trip) continue;
       const vehicleOwnerId = trip.vehicle?.owner_id;
       const driverOwnerId = trip.driver?.owner_id;
       const ownerMatches = Number(vehicleOwnerId) === Number(req.user.id) || Number(driverOwnerId) === Number(req.user.id);
-      const ownerId = isOwner ? Number(req.user.id) : Number(vehicleOwnerId || driverOwnerId || 0) || null;
-      if (!ownerId || (isOwner && !ownerMatches)) continue;
+      const ownerId = isOwner ? Number(req.user.id) : Number(vehicleOwnerId || driverOwnerId || 0);
+      if (isOwner && !ownerMatches) continue;
 
       const tripDateKey = `${Number(trip.id)}:${booking.travel_date}`;
       let group = tripSeatGroups.get(tripDateKey);
@@ -278,23 +332,58 @@ exports.revenueReport = async (req, res, next) => {
         tripSeatGroups.set(tripDateKey, group);
       }
       group.bookings.add(Number(booking.id));
-      const bookingDate = new Date(booking.created_at);
-      const seatNumbers = SeatReservationService.parseSeatNumbers(booking.seat_numbers);
-      const bookingSeatCount = seatNumbers.length || Math.max(1, Number(booking.total_seats) || 1);
-      const storedFare = Number(booking.total_fare);
-      const historicFare = Number.isFinite(storedFare) && storedFare > 0
-        ? storedFare
+      const bookedSeatNumbers = SeatReservationService.parseSeatNumbers(booking.seat_numbers);
+      const bookedSeatCount = bookedSeatNumbers.length || Math.max(1, Number(booking.total_seats) || 1);
+      const bookingGrossFare = Number(booking.total_fare) > 0
+        ? Number(booking.total_fare)
         : Math.max(0, Number(booking.final_amount || 0) + Number(booking.discount_amount || 0));
-      const farePerSeat = historicFare / bookingSeatCount;
+      const bookingNetFare = Math.max(0, Number(booking.final_amount || 0));
+      if (isAdmin && booking.payment_status === 'paid') {
+        const revenueGroupKey = `${ownerId}:${tripDateKey}`;
+        let bookingRevenueGroup = bookingRevenueGroups.get(revenueGroupKey);
+        if (!bookingRevenueGroup) {
+          bookingRevenueGroup = {
+            owner_id: Number(ownerId),
+            trip_id: Number(trip.id),
+            schedule_code: trip.schedule_code,
+            travel_date: booking.travel_date,
+            route_name: trip.route?.route_name || `Route #${trip.route_id}`,
+            bookings: 0,
+            seats: 0,
+            gross_revenue: 0,
+            net_revenue: 0,
+          };
+          bookingRevenueGroups.set(revenueGroupKey, bookingRevenueGroup);
+        }
+        bookingRevenueGroup.bookings += 1;
+        bookingRevenueGroup.seats += bookedSeatCount;
+        bookingRevenueGroup.gross_revenue = addMoney(bookingRevenueGroup.gross_revenue, bookingGrossFare);
+        bookingRevenueGroup.net_revenue = addMoney(bookingRevenueGroup.net_revenue, bookingNetFare);
+      }
+
+      const bookingDate = new Date(booking.created_at);
+      const seatNumbers = bookedSeatNumbers;
+      const bookingSeatCount = bookedSeatCount;
+      const historicFare = bookingGrossFare;
+      const grossFarePerSeat = historicFare / bookingSeatCount;
+      const netFarePerSeat = Math.max(0, Number(booking.final_amount || 0)) / bookingSeatCount;
       if (seatNumbers.length) {
         for (const seat of seatNumbers) {
           const identity = normalizeSeatIdentity(seat);
-          if (!group.seats.has(identity)) group.seats.set(identity, { bookedAt: bookingDate, fare: farePerSeat });
+          if (!group.seats.has(identity)) group.seats.set(identity, {
+            bookedAt: bookingDate,
+            grossFare: grossFarePerSeat,
+            netFare: netFarePerSeat,
+          });
         }
       } else {
         const fallbackSeatCount = Math.max(1, Number(booking.total_seats) || 1);
         for (let index = 0; index < fallbackSeatCount; index += 1) {
-          group.seats.set(`booking:${booking.id}:${index}`, { bookedAt: bookingDate, fare: farePerSeat });
+          group.seats.set(`booking:${booking.id}:${index}`, {
+            bookedAt: bookingDate,
+            grossFare: grossFarePerSeat,
+            netFare: netFarePerSeat,
+          });
         }
       }
     }
@@ -306,8 +395,12 @@ exports.revenueReport = async (req, res, next) => {
     const tripBreakdown = [];
     for (const group of tripSeatGroups.values()) {
       const routeId = Number(group.trip.route_id);
-      let tripRevenue = 0;
-      for (const seat of group.seats.values()) tripRevenue = addMoney(tripRevenue, seat.fare);
+      let tripGrossRevenue = 0;
+      let tripNetRevenue = 0;
+      for (const seat of group.seats.values()) {
+        tripGrossRevenue = addMoney(tripGrossRevenue, seat.grossFare);
+        tripNetRevenue = addMoney(tripNetRevenue, seat.netFare);
+      }
       tripBreakdown.push({
         owner_id: group.ownerId,
         trip_id: Number(group.trip.id),
@@ -335,11 +428,13 @@ exports.revenueReport = async (req, res, next) => {
         } : null,
         distinct_seats: group.seats.size,
         booking_count: group.bookings.size,
-        revenue: tripRevenue,
+        gross_revenue: tripGrossRevenue,
+        net_revenue: tripNetRevenue,
+        revenue: tripGrossRevenue,
       });
       let ownerTotal = ownerTotals.get(group.ownerId);
       if (!ownerTotal) {
-        ownerTotal = { owner_id: group.ownerId, owner_name: group.trip.vehicle?.owner?.name || group.trip.driver?.owner?.name || null, revenue: 0, distinct_seats: 0, trips: 0 };
+        ownerTotal = { owner_id: group.ownerId, owner_name: group.trip.vehicle?.owner?.name || group.trip.driver?.owner?.name || null, gross_revenue: 0, net_revenue: 0, revenue: 0, distinct_seats: 0, trips: 0 };
         ownerTotals.set(group.ownerId, ownerTotal);
       }
       ownerTotal.trips += 1;
@@ -354,6 +449,7 @@ exports.revenueReport = async (req, res, next) => {
           route_name: group.trip.route?.route_name || `Route #${routeId}`,
           fare_per_seat: 0,
           fare_total: 0,
+          net_revenue: 0,
           revenue: 0,
           distinct_seats: 0,
           trips: 0,
@@ -364,26 +460,33 @@ exports.revenueReport = async (req, res, next) => {
       routeTotal.trips += 1;
 
       for (const seat of group.seats.values()) {
-        ownerTotal.revenue = addMoney(ownerTotal.revenue, seat.fare);
-        routeTotal.revenue = addMoney(routeTotal.revenue, seat.fare);
-        routeTotal.fare_total = addMoney(routeTotal.fare_total, seat.fare);
+        ownerTotal.gross_revenue = addMoney(ownerTotal.gross_revenue, seat.grossFare);
+        ownerTotal.net_revenue = addMoney(ownerTotal.net_revenue, seat.netFare);
+        ownerTotal.revenue = ownerTotal.gross_revenue;
+        routeTotal.revenue = addMoney(routeTotal.revenue, seat.grossFare);
+        routeTotal.net_revenue = addMoney(routeTotal.net_revenue, seat.netFare);
+        routeTotal.fare_total = addMoney(routeTotal.fare_total, seat.grossFare);
 
         const periodKey = getRevenuePeriod(seat.bookedAt, groupBy);
         let periodTotal = periodTotals.get(periodKey);
         if (!periodTotal) {
-          periodTotal = { period: periodKey, revenue: 0, distinct_seats: 0 };
+          periodTotal = { period: periodKey, gross_revenue: 0, net_revenue: 0, revenue: 0, distinct_seats: 0 };
           periodTotals.set(periodKey, periodTotal);
         }
-        periodTotal.revenue = addMoney(periodTotal.revenue, seat.fare);
+        periodTotal.gross_revenue = addMoney(periodTotal.gross_revenue, seat.grossFare);
+        periodTotal.net_revenue = addMoney(periodTotal.net_revenue, seat.netFare);
+        periodTotal.revenue = periodTotal.gross_revenue;
         periodTotal.distinct_seats += 1;
 
         const ownerPeriodKey = `${group.ownerId}:${periodKey}`;
         let ownerPeriodTotal = periodOwnerTotals.get(ownerPeriodKey);
         if (!ownerPeriodTotal) {
-          ownerPeriodTotal = { owner_id: group.ownerId, period: periodKey, revenue: 0, distinct_seats: 0 };
+          ownerPeriodTotal = { owner_id: group.ownerId, period: periodKey, gross_revenue: 0, net_revenue: 0, revenue: 0, distinct_seats: 0 };
           periodOwnerTotals.set(ownerPeriodKey, ownerPeriodTotal);
         }
-        ownerPeriodTotal.revenue = addMoney(ownerPeriodTotal.revenue, seat.fare);
+        ownerPeriodTotal.gross_revenue = addMoney(ownerPeriodTotal.gross_revenue, seat.grossFare);
+        ownerPeriodTotal.net_revenue = addMoney(ownerPeriodTotal.net_revenue, seat.netFare);
+        ownerPeriodTotal.revenue = ownerPeriodTotal.gross_revenue;
         ownerPeriodTotal.distinct_seats += 1;
       }
     }
@@ -392,11 +495,29 @@ exports.revenueReport = async (req, res, next) => {
       routeTotal.fare_per_seat = routeTotal.distinct_seats
         ? Math.round((routeTotal.fare_total / routeTotal.distinct_seats + Number.EPSILON) * 100) / 100
         : 0;
+      routeTotal.revenue = routeTotal.fare_total;
       delete routeTotal.fare_total;
     }
 
-    const ownerIds = [...ownerTotals.keys()];
-    const owners = ownerIds.length ? await AdminUser.findAll({ attributes: ['id', 'name'], where: { id: { [Op.in]: ownerIds } }, raw: true }) : [];
+    const owners = isAdmin ? await AdminUser.findAll({
+      attributes: ['id', 'name'],
+      include: [{ model: Role, as: 'role', attributes: [], where: { name: 'owner' }, required: true }],
+      raw: true,
+    }) : [];
+    for (const owner of owners) {
+      const ownerId = Number(owner.id);
+      if (!ownerTotals.has(ownerId)) {
+        ownerTotals.set(ownerId, {
+          owner_id: ownerId,
+          owner_name: owner.name,
+          gross_revenue: 0,
+          net_revenue: 0,
+          revenue: 0,
+          distinct_seats: 0,
+          trips: 0,
+        });
+      }
+    }
     const ownerNames = new Map(owners.map((owner) => [Number(owner.id), owner.name]));
     const ownerBreakdown = [...ownerTotals.values()]
       .map((owner) => ({ ...owner, owner_name: ownerNames.get(owner.owner_id) || `Owner #${owner.owner_id}` }))
@@ -408,18 +529,31 @@ exports.revenueReport = async (req, res, next) => {
       .filter((route) => !selectedOwnerId || route.owner_id === selectedOwnerId)
       .sort((a, b) => b.revenue - a.revenue);
     const report = [...periodTotals.values()].sort((a, b) => a.period.localeCompare(b.period));
-    const total = filteredOwners.reduce((sum, owner) => sum + owner.revenue, 0);
+    const grossRevenue = filteredOwners.reduce((sum, owner) => sum + owner.gross_revenue, 0);
+    const netRevenue = filteredOwners.reduce((sum, owner) => sum + owner.net_revenue, 0);
+    const total = grossRevenue;
     const distinctSeats = filteredOwners.reduce((sum, owner) => sum + owner.distinct_seats, 0);
     const filteredReport = selectedOwnerId
       ? [...periodOwnerTotals.values()]
         .filter((row) => row.owner_id === selectedOwnerId)
-        .map(({ period, revenue, distinct_seats }) => ({ period, revenue, distinct_seats }))
+        .map(({ period, gross_revenue, net_revenue, revenue, distinct_seats }) => ({ period, gross_revenue, net_revenue, revenue, distinct_seats }))
         .sort((a, b) => a.period.localeCompare(b.period))
       : report;
+    const filteredBookingRevenue = [...bookingRevenueGroups.values()]
+      .filter((row) => !selectedOwnerId || row.owner_id === selectedOwnerId)
+      .sort((a, b) => String(b.travel_date || '').localeCompare(String(a.travel_date || '')) || b.trip_id - a.trip_id);
+    const bookingRevenueSummary = filteredBookingRevenue.reduce((totals, row) => ({
+      bookings: totals.bookings + row.bookings,
+      seats: totals.seats + row.seats,
+      gross_revenue: addMoney(totals.gross_revenue, row.gross_revenue),
+      net_revenue: addMoney(totals.net_revenue, row.net_revenue),
+    }), { bookings: 0, seats: 0, gross_revenue: 0, net_revenue: 0 });
 
     res.json({ success: true, data: {
       report: filteredReport,
       total,
+      gross_revenue: grossRevenue,
+      net_revenue: netRevenue,
       distinct_seats: distinctSeats,
       owner_breakdown: filteredOwners,
       owner_options: ownerBreakdown.map(({ owner_id, owner_name }) => ({ owner_id, owner_name })),
@@ -427,6 +561,8 @@ exports.revenueReport = async (req, res, next) => {
       trip_breakdown: tripBreakdown
         .filter((trip) => !selectedOwnerId || trip.owner_id === selectedOwnerId)
         .sort((a, b) => String(b.travel_date || '').localeCompare(String(a.travel_date || '')) || b.trip_id - a.trip_id),
+      booking_revenue_breakdown: isAdmin ? filteredBookingRevenue : [],
+      booking_revenue_totals: isAdmin ? bookingRevenueSummary : null,
     } });
   } catch (err) {
     next(err);
