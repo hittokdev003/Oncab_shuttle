@@ -800,8 +800,8 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onNotify }) => {
               )}
             </div>
 
-            {/* Grid 1: Passenger & Ticket Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Grid 1: Passenger, Trip & Driver Information */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Passenger Box */}
               <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 border-b border-slate-800 pb-2">
@@ -857,6 +857,49 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onNotify }) => {
                     <div className="flex justify-between">
                       <span className="text-slate-400">Departure Time:</span>
                       <span className="font-mono text-slate-300">{detail.trip.departure_time}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Driver & Bus Box */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                  <Bus size={14} className="text-indigo-400" /> Assigned Driver & Bus
+                </h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Driver Name:</span>
+                    <span className="font-semibold text-white">
+                      {detail.trip?.driver?.name || 'Unassigned'}
+                    </span>
+                  </div>
+                  {detail.trip?.driver?.mobile && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Driver Phone:</span>
+                      <a href={`tel:${detail.trip.driver.mobile}`} className="font-mono text-indigo-400 hover:underline">
+                        {detail.trip.driver.mobile}
+                      </a>
+                    </div>
+                  )}
+                  {detail.trip?.driver?.online_status && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Driver Status:</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${detail.trip.driver.online_status === 'online' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-slate-800 text-slate-400'}`}>
+                        {detail.trip.driver.online_status}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Vehicle Bus:</span>
+                    <span className="font-mono font-semibold text-slate-200">
+                      {detail.trip?.vehicle?.registration_number || 'Unassigned'}
+                    </span>
+                  </div>
+                  {detail.trip?.vehicle?.company_model && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Bus Model:</span>
+                      <span className="text-slate-300">{detail.trip.vehicle.company_model}</span>
                     </div>
                   )}
                 </div>

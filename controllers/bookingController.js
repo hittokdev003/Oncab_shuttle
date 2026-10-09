@@ -35,7 +35,7 @@ const BOOKING_INCLUDE = [
       {
         model: Driver,
         as: 'driver',
-        attributes: ['id', 'name', 'mobile', 'online_status'],
+        attributes: ['id', 'name', 'mobile', 'online_status', 'photo'],
         required: false,
         include: [
           {

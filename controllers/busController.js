@@ -1149,6 +1149,18 @@ exports.getBookingDetails = async (req, res, next) => {
           origin_city: booking.trip?.route?.origin_city,
           destination_city: booking.trip?.route?.destination_city,
         },
+        driver: booking.trip?.driver ? {
+          id: booking.trip.driver.id,
+          name: booking.trip.driver.name,
+          mobile: booking.trip.driver.mobile,
+          online_status: booking.trip.driver.online_status,
+          photo: booking.trip.driver.photo,
+        } : null,
+        vehicle: booking.trip?.vehicle ? {
+          id: booking.trip.vehicle.id,
+          registration_number: booking.trip.vehicle.registration_number,
+          company_model: booking.trip.vehicle.company_model,
+        } : null,
       },
       origin_stop: booking.origin_stop,
       destination_stop: booking.destination_stop,
