@@ -31,7 +31,16 @@ const BOOKING_INCLUDE = [
     model: Trip,
     as: 'trip',
     include: [
-      { model: Route, as: 'route' },
+      {
+        model: Route,
+        as: 'route',
+        include: [{
+          model: Stop,
+          as: 'stops',
+          attributes: ['id', 'stop_name', 'stop_code', 'latitude', 'longitude', 'address', 'landmark', 'stop_sequence'],
+          required: false,
+        }],
+      },
       {
         model: Driver,
         as: 'driver',
@@ -100,7 +109,7 @@ exports.list = async (req, res, next) => {
     res.json({ success: true, data: rows, pagination: { total: count, page: p, limit: lim, pages: Math.ceil(count / lim) } });
   } catch (err) {
     next(err);
-  }git 
+  }
 };
 
 // ── Get Booking ────────────────────────────────────────────
@@ -226,22 +235,6 @@ exports.cancel = async (req, res, next) => {
     if (!booking) { await t.rollback(); return res.status(404).json({ success: false, message: 'Booking not found' }); }
     if (booking.booking_status === 'cancelled') { await t.rollback(); return res.status(400).json({ success: false, message: 'Booking already cancelled' }); }
 
-    const isAdmin = req.user && (req.user.role || req.user.role_id);
-    if (!isAdmin) {
-      const createdAt = new Date(booking.created_at || booking.createdAt);
-      const now = new Date();
-      if (!isNaN(createdAt.getTime())) {
-        const minutesSinceBooking = (now.getTime() - createdAt.getTime()) / (1000 * 60);
-        if (minutesSinceBooking > 30) {
-          await t.rollback();
-          return res.status(400).json({
-            success: false,
-            message: 'Booking cannot be cancelled after 30 minutes of booking creation',
-          });
-        }
-      }
-    }
-
     const wasSeatAllocated = booking.booking_status === 'confirmed' && booking.payment_status === 'paid';
     const { cancellation_reason } = req.body;
     await booking.update({ booking_status: 'cancelled', status: 'Cancelled', cancellation_reason, cancelled_at: new Date(), cancelled_by: req.user?.id }, { transaction: t });
@@ -323,12 +316,30 @@ exports.track = async (req, res, next) => {
     const driver = trip.driver || {};
     const driverDetail = driver.details || {};
     const vehicle = trip.vehicle || {};
+    const tripStops = (trip.route?.stops || [])
+      .slice()
+      .sort((stopA, stopB) => (Number(stopA.stop_sequence) || 0) - (Number(stopB.stop_sequence) || 0))
+      .map((stop) => ({
+        id: stop.id,
+        stop_name: stop.stop_name,
+        stop_code: stop.stop_code,
+        latitude: stop.latitude == null ? null : Number(stop.latitude),
+        longitude: stop.longitude == null ? null : Number(stop.longitude),
+        address: stop.address || null,
+        landmark: stop.landmark || null,
+        stop_sequence: stop.stop_sequence,
+      }));
     const originStop = bookingData.origin_stop || {};
     const destinationStop = bookingData.destination_stop || {};
 
-    const busLatRaw = driverDetail.latitude != null ? driverDetail.latitude : vehicle.latitude;
-    const busLngRaw = driverDetail.longitude != null ? driverDetail.longitude : vehicle.longitude;
-    const hasBusLocation = busLatRaw != null && busLngRaw != null && !isNaN(Number(busLatRaw)) && !isNaN(Number(busLngRaw));
+    const busLatRaw = driverDetail.latitude;
+    const busLngRaw = driverDetail.longitude;
+    const locationMatchesTrip = driverDetail.location_trip_id == null
+      || Number(driverDetail.location_trip_id) === Number(trip.id);
+    const hasBusLocation = locationMatchesTrip
+      && busLatRaw != null && busLngRaw != null
+      && Number.isFinite(Number(busLatRaw)) && Number.isFinite(Number(busLngRaw))
+      && Math.abs(Number(busLatRaw)) <= 90 && Math.abs(Number(busLngRaw)) <= 180;
 
     const busLocation = hasBusLocation
       ? {
@@ -418,6 +429,7 @@ exports.track = async (req, res, next) => {
         passenger_mobile: booking.passenger_mobile,
         travel_date: booking.travel_date,
         bus_location: busLocation,
+        trip_stops: tripStops,
         boarding_stop: boardingStop,
         destination_stop: destinationLocation,
         distance_meters: distanceMeters,

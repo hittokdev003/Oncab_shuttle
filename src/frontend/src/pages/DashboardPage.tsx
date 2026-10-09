@@ -15,7 +15,7 @@ interface DashboardStats {
     drivers: { total: number; active: number };
     vehicles: { total: number; active: number };
     passengers: { total: number };
-    revenue?: { total: number; today: number };
+    revenue?: { total: number; today: number; distinctSeats?: number };
     refunds?: { pending: number; pendingAmount: number; completedAmount: number };
   };
   charts?: {
@@ -102,10 +102,11 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard title="My Vehicles" value={summary.vehicles.total} icon={Truck} color="#f59e0b" subtitle={`${summary.vehicles.active} active`} />
           <StatCard title="My Drivers" value={summary.drivers.total} icon={UserRound} color="#8b5cf6" subtitle={`${summary.drivers.active} active`} />
           <StatCard title="Active Trips" value={summary.trips.active} icon={Bus} color="#10b981" subtitle={`${summary.trips.today} today`} />
+          <StatCard title="Revenue Earned" value={formatCurrency(summary.revenue?.total || 0)} icon={TrendingUp} color="#06b6d4" subtitle={`${formatCurrency(summary.revenue?.today || 0)} today · ${summary.revenue?.distinctSeats || 0} distinct seats`} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

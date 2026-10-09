@@ -52,6 +52,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
   const ownerRows = revenueData?.owner_breakdown || [];
   const routeRows = revenueData?.route_breakdown || [];
   const tripRows = revenueData?.trip_breakdown || [];
+  const bookingRevenueRows = revenueData?.booking_revenue_breakdown || [];
+  const bookingRevenueTotals = revenueData?.booking_revenue_totals || { bookings: 0, seats: 0, gross_revenue: 0, net_revenue: 0 };
   const ownerOptions = revenueData?.owner_options || [];
   const ownerNameById = new Map(ownerOptions.map((owner: any) => [String(owner.owner_id), owner.owner_name]));
 
@@ -60,7 +62,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight">Reports & Analytics</h2>
-          <p className="text-slate-400 text-sm">Revenue uses the fare saved at booking before coupon discounts</p>
+          <p className="text-slate-400 text-sm">{isAdmin ? 'Compare revenue before and after coupon discounts' : 'Owner revenue counts distinct seats from confirmed, paid, boarded bookings; coupons do not reduce it'}</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <Select
@@ -99,14 +101,14 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-5">
               <div className="flex items-center justify-between text-slate-400 mb-2">
-                <span className="text-xs font-semibold uppercase tracking-wider">Total Revenue</span>
+                <span className="text-xs font-semibold uppercase tracking-wider">{isAdmin ? 'Revenue before coupons' : 'Revenue earned'}</span>
                 <DollarSign className="w-5 h-5 text-emerald-400" />
               </div>
               <div className="text-2xl font-bold text-white">
-                ₹{Number(revenueData?.total || 0).toLocaleString('en-IN')}
+                ₹{Number((isAdmin ? revenueData?.gross_revenue : revenueData?.total) || 0).toLocaleString('en-IN')}
               </div>
               <div className="text-xs text-emerald-400 flex items-center gap-1 mt-1">
-                <TrendingUp className="w-3.5 h-3.5" /> {Number(revenueData?.distinct_seats || 0).toLocaleString('en-IN')} distinct seats
+                {isAdmin ? `After coupons: ₹${Number(revenueData?.net_revenue || 0).toLocaleString('en-IN')}` : <><TrendingUp className="w-3.5 h-3.5" /> {Number(revenueData?.distinct_seats || 0).toLocaleString('en-IN')} distinct seats</>}
               </div>
             </div>
 
@@ -150,18 +152,21 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
               <div className="space-y-4">
                 <div className="h-64 flex items-end gap-3 pt-6 pb-2 px-4 border-b border-slate-700/50">
                   {reportRows.map((item: any, idx: number) => {
-                    const rev = Number(item.revenue || item.total_amount || 0);
-                    const maxRev = Math.max(...reportRows.map((d: any) => Number(d.revenue || d.total_amount || 1)));
-                    const heightPct = Math.max(12, Math.round((rev / (maxRev || 1)) * 100));
+                    const grossRevenue = Number(item.gross_revenue ?? item.revenue ?? item.total_amount ?? 0);
+                    const netRevenue = Number(item.net_revenue ?? item.revenue ?? item.total_amount ?? 0);
+                    const maxRev = Math.max(...reportRows.flatMap((row: any) => [Number(row.gross_revenue ?? row.revenue ?? row.total_amount ?? 0), Number(row.net_revenue ?? row.revenue ?? row.total_amount ?? 0)]), 1);
+                    const primaryRevenue = grossRevenue;
+                    const primaryHeight = Math.max(12, Math.round((primaryRevenue / maxRev) * 100));
+                    const netHeight = Math.max(12, Math.round((netRevenue / maxRev) * 100));
                     return (
                       <div key={idx} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
                         <div className="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                          ₹{rev}
+                          {isAdmin ? `Before ₹${grossRevenue} · After ₹${netRevenue}` : `₹${primaryRevenue}`}
                         </div>
-                        <div
-                          className="w-full bg-gradient-to-t from-cyan-600 to-indigo-500 rounded-t-sm transition-all duration-300 group-hover:brightness-125"
-                          style={{ height: `${heightPct}%` }}
-                        />
+                        <div className="flex w-full items-end justify-center gap-1" style={{ height: '100%' }}>
+                          <div className="flex-1 bg-cyan-600 rounded-t-sm transition-all duration-300 group-hover:brightness-125" style={{ height: `${primaryHeight}%` }} />
+                          {isAdmin && <div className="flex-1 bg-emerald-500 rounded-t-sm transition-all duration-300 group-hover:brightness-125" style={{ height: `${netHeight}%` }} />}
+                        </div>
                         <div className="text-xs text-slate-400 truncate w-full text-center">
                           {item.period || item.label || item.date || `P${idx+1}`}
                         </div>
@@ -176,10 +181,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
               </div>
             )}
           </Card>
+          {isAdmin && <div className="flex items-center justify-end gap-4 text-xs text-slate-400"><span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-cyan-600" />Before coupons</span><span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />After coupons</span></div>}
 
           <Card title={isAdmin ? 'Revenue by Owner' : 'My Revenue by Route'}>
             <Table
-              headers={isAdmin ? ['Owner', 'Trips', 'Distinct seats', 'Revenue before coupons'] : ['Route', 'Trips', 'Distinct seats', 'Avg. historical fare', 'Revenue before coupons']}
+              headers={isAdmin ? ['Owner', 'Trips', 'Distinct seats', 'Before coupons', 'After coupons'] : ['Route', 'Trips', 'Distinct seats', 'Avg. historical fare', 'Revenue earned']}
               loading={loading}
               empty={isAdmin ? ownerRows.length === 0 : routeRows.length === 0}
               emptyMessage="No booked seats match these filters"
@@ -189,7 +195,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
                   <Td className="font-medium text-white">{owner.owner_name}</Td>
                   <Td>{owner.trips}</Td>
                   <Td>{owner.distinct_seats}</Td>
-                  <Td className="font-semibold text-emerald-300">₹{Number(owner.revenue || 0).toLocaleString('en-IN')}</Td>
+                  <Td>₹{Number(owner.gross_revenue || 0).toLocaleString('en-IN')}</Td>
+                  <Td className="font-semibold text-emerald-300">₹{Number(owner.net_revenue || 0).toLocaleString('en-IN')}</Td>
                 </Tr>
               )) : routeRows.map((route: any) => (
                 <Tr key={`${route.owner_id}-${route.route_id}`}>
@@ -204,7 +211,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
           </Card>
 
           {isAdmin && <Card title="Route Revenue">
-            <Table headers={['Owner', 'Route', 'Trips', 'Distinct seats', 'Avg. historical fare', 'Revenue before coupons']} loading={loading} empty={routeRows.length === 0} emptyMessage="No route revenue matches these filters">
+            <Table headers={['Owner', 'Route', 'Trips', 'Distinct seats', 'Avg. historical fare', 'Before coupons', 'After coupons']} loading={loading} empty={routeRows.length === 0} emptyMessage="No route revenue matches these filters">
               {routeRows.map((route: any) => (
                 <Tr key={`${route.owner_id}-${route.route_id}`}>
                   <Td>{ownerNameById.get(String(route.owner_id)) || `Owner #${route.owner_id}`}</Td>
@@ -212,7 +219,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
                   <Td>{route.trips}</Td>
                   <Td>{route.distinct_seats}</Td>
                   <Td>₹{Number(route.fare_per_seat || 0).toLocaleString('en-IN')}</Td>
-                  <Td className="font-semibold text-emerald-300">₹{Number(route.revenue || 0).toLocaleString('en-IN')}</Td>
+                  <Td>₹{Number(route.revenue || 0).toLocaleString('en-IN')}</Td>
+                  <Td className="font-semibold text-emerald-300">₹{Number(route.net_revenue || 0).toLocaleString('en-IN')}</Td>
                 </Tr>
               ))}
             </Table>
@@ -229,7 +237,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
                 'Distinct seats',
                 'Bookings',
                 'Trip status',
-                'Revenue',
+                ...(isAdmin ? ['Before coupons', 'After coupons'] : ['Revenue earned']),
               ]}
               loading={loading}
               empty={tripRows.length === 0}
@@ -257,11 +265,45 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onNotify }) => {
                   <Td>{trip.distinct_seats}</Td>
                   <Td>{trip.booking_count}</Td>
                   <Td>{trip.status || '—'}</Td>
-                  <Td className="font-semibold text-emerald-300">₹{Number(trip.revenue || 0).toLocaleString('en-IN')}</Td>
+                  {isAdmin ? <>
+                    <Td>₹{Number(trip.gross_revenue || 0).toLocaleString('en-IN')}</Td>
+                    <Td className="font-semibold text-emerald-300">₹{Number(trip.net_revenue || 0).toLocaleString('en-IN')}</Td>
+                  </> : <Td className="font-semibold text-emerald-300">₹{Number(trip.revenue || 0).toLocaleString('en-IN')}</Td>}
                 </Tr>
               ))}
             </Table>
           </Card>
+
+          {isAdmin && <Card title="Super Admin Booking Revenue">
+            <Table
+              headers={['Owner', 'Trip / Date', 'Seats booked', 'Total bookings', 'Before coupons', 'After coupons']}
+              loading={loading}
+              empty={bookingRevenueRows.length === 0}
+              emptyMessage="No bookings match this report period"
+            >
+              {bookingRevenueRows.map((row: any) => (
+                <Tr key={`${row.owner_id}-${row.trip_id}-${row.travel_date}`}>
+                  <Td className="font-medium text-white">{row.owner_id ? ownerNameById.get(String(row.owner_id)) || `Owner #${row.owner_id}` : 'Unassigned'}</Td>
+                  <Td>
+                    <div className="font-medium text-white">{row.schedule_code || `Trip #${row.trip_id}`}</div>
+                    <div className="text-xs text-slate-400">{row.route_name} · {row.travel_date}</div>
+                  </Td>
+                  <Td>{row.seats.toLocaleString('en-IN')}</Td>
+                  <Td>{row.bookings.toLocaleString('en-IN')}</Td>
+                  <Td>₹{Number(row.gross_revenue || 0).toLocaleString('en-IN')}</Td>
+                  <Td className="font-semibold text-emerald-300">₹{Number(row.net_revenue || 0).toLocaleString('en-IN')}</Td>
+                </Tr>
+              ))}
+              <Tr>
+                <Td className="font-bold text-white">Total</Td>
+                <Td>All matching trips</Td>
+                <Td className="font-bold text-white">{Number(bookingRevenueTotals.seats || 0).toLocaleString('en-IN')}</Td>
+                <Td className="font-bold text-white">{Number(bookingRevenueTotals.bookings || 0).toLocaleString('en-IN')}</Td>
+                <Td className="font-bold text-white">₹{Number(bookingRevenueTotals.gross_revenue || 0).toLocaleString('en-IN')}</Td>
+                <Td className="font-bold text-emerald-300">₹{Number(bookingRevenueTotals.net_revenue || 0).toLocaleString('en-IN')}</Td>
+              </Tr>
+            </Table>
+          </Card>}
         </>
       )}
     </div>
